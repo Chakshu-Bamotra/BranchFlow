@@ -29,7 +29,7 @@ class BranchChip extends StatelessWidget {
       icon = Icons.home_outlined;
     } else if (isCurrent) {
       bg = AppColors.accentSoft;
-      border = AppColors.accentLight.withOpacity(0.4);
+      border = AppColors.accentLight.withValues(alpha: 0.4);
       text = AppColors.accent;
       icon = Icons.place_outlined;
     }

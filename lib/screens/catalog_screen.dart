@@ -3,6 +3,7 @@ import '../core/constants/app_colors.dart';
 import '../models/book.dart';
 import '../services/library_repository.dart';
 import '../widgets/branch_chip.dart';
+import '../widgets/empty_state_card.dart';
 import '../widgets/status_badge.dart';
 
 class CatalogScreen extends StatefulWidget {
@@ -266,29 +267,18 @@ class _CatalogScreenState extends State<CatalogScreen> {
               // Book List
               Expanded(
                 child: filteredBooks.isEmpty
-                    ? Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            const Icon(Icons.menu_book, size: 48, color: AppColors.textMuted),
-                            const SizedBox(height: 12),
-                            const Text(
-                              'No books match your criteria',
-                              style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
-                            ),
-                            const SizedBox(height: 4),
-                            TextButton(
-                              onPressed: () {
-                                setState(() {
-                                  _searchController.clear();
-                                  _selectedBranchFilter = 'all';
-                                  _selectedStatusFilter = 'all';
-                                });
-                              },
-                              child: const Text('Reset filters'),
-                            ),
-                          ],
-                        ),
+                    ? EmptyStateCard(
+                        title: 'No books match your criteria',
+                        message: 'Try searching with a different title, ISBN, or reset branch filters.',
+                        icon: Icons.search_off_rounded,
+                        actionLabel: 'Reset filters',
+                        onAction: () {
+                          setState(() {
+                            _searchController.clear();
+                            _selectedBranchFilter = 'all';
+                            _selectedStatusFilter = 'all';
+                          });
+                        },
                       )
                     : ListView.builder(
                         padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
@@ -312,7 +302,7 @@ class _CatalogScreenState extends State<CatalogScreen> {
                                         width: 44,
                                         height: 58,
                                         decoration: BoxDecoration(
-                                          color: AppColors.primary.withOpacity(0.08),
+                                          color: AppColors.primary.withValues(alpha: 0.08),
                                           borderRadius: BorderRadius.circular(8),
                                           border: Border.all(color: AppColors.border),
                                         ),

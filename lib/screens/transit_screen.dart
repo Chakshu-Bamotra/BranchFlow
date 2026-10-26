@@ -4,6 +4,7 @@ import '../core/constants/app_colors.dart';
 import '../models/transit_item.dart';
 import '../services/library_repository.dart';
 import '../widgets/branch_chip.dart';
+import '../widgets/empty_state_card.dart';
 import '../widgets/status_badge.dart';
 
 class TransitScreen extends StatelessWidget {
@@ -143,22 +144,10 @@ class TransitScreen extends StatelessWidget {
     required DateFormat dateFormat,
   }) {
     if (items.isEmpty) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(Icons.inventory_2_outlined, size: 48, color: AppColors.textMuted),
-              const SizedBox(height: 12),
-              Text(
-                emptyMessage,
-                textAlign: TextAlign.center,
-                style: const TextStyle(fontSize: 14, color: AppColors.textSecondary),
-              ),
-            ],
-          ),
-        ),
+      return EmptyStateCard(
+        title: 'Transit Queue Clear',
+        message: emptyMessage,
+        icon: Icons.local_shipping_outlined,
       );
     }
 

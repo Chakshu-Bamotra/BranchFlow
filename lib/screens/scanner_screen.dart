@@ -96,9 +96,9 @@ class _ScannerScreenState extends State<ScannerScreen> {
                 Container(
                   padding: const EdgeInsets.all(14),
                   decoration: BoxDecoration(
-                    color: AppColors.primary.withOpacity(0.06),
+                    color: AppColors.primary.withValues(alpha: 0.06),
                     borderRadius: BorderRadius.circular(14),
-                    border: Border.all(color: AppColors.primary.withOpacity(0.15)),
+                    border: Border.all(color: AppColors.primary.withValues(alpha: 0.15)),
                   ),
                   child: Row(
                     children: [

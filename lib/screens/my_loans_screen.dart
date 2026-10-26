@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 import '../core/constants/app_colors.dart';
 import '../services/library_repository.dart';
 import '../widgets/branch_chip.dart';
+import '../widgets/empty_state_card.dart';
 import '../widgets/status_badge.dart';
 import 'return_receipt_screen.dart';
 
@@ -56,7 +57,7 @@ class MyLoansScreen extends StatelessWidget {
                     children: [
                       CircleAvatar(
                         radius: 24,
-                        backgroundColor: AppColors.accentLight.withOpacity(0.2),
+                        backgroundColor: AppColors.accentLight.withValues(alpha: 0.2),
                         child: const Icon(Icons.person, color: AppColors.accentLight, size: 28),
                       ),
                       const SizedBox(width: 14),
@@ -83,9 +84,9 @@ class MyLoansScreen extends StatelessWidget {
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                         decoration: BoxDecoration(
-                          color: AppColors.success.withOpacity(0.2),
+                          color: AppColors.success.withValues(alpha: 0.2),
                           borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: AppColors.success.withOpacity(0.4)),
+                          border: Border.all(color: AppColors.success.withValues(alpha: 0.4)),
                         ),
                         child: const Row(
                           children: [
@@ -111,15 +112,12 @@ class MyLoansScreen extends StatelessWidget {
                     children: [
                       // Active Loans Tab
                       activeLoans.isEmpty
-                          ? Center(
-                              child: Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  const Icon(Icons.bookmark_border, size: 48, color: AppColors.textMuted),
-                                  const SizedBox(height: 12),
-                                  const Text('No active borrowed books', style: TextStyle(color: AppColors.textSecondary)),
-                                ],
-                              ),
+                          ? EmptyStateCard(
+                              title: 'No Active Loans',
+                              message: 'You have returned all borrowed books. Browse the catalog to borrow new titles!',
+                              icon: Icons.bookmark_border,
+                              actionLabel: 'Browse Catalog',
+                              onAction: onNavigateToScanner,
                             )
                           : ListView.builder(
                               padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
@@ -185,15 +183,10 @@ class MyLoansScreen extends StatelessWidget {
 
                       // Returned Loans & Official Proof of Return
                       returnedLoans.isEmpty
-                          ? Center(
-                              child: Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  const Icon(Icons.receipt_long_outlined, size: 48, color: AppColors.textMuted),
-                                  const SizedBox(height: 12),
-                                  const Text('No return receipts yet', style: TextStyle(color: AppColors.textSecondary)),
-                                ],
-                              ),
+                          ? const EmptyStateCard(
+                              title: 'No Return Receipts Yet',
+                              message: 'When you drop off books at any branch, your official zero-liability receipts will appear here.',
+                              icon: Icons.receipt_long_outlined,
                             )
                           : ListView.builder(
                               padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
