@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../core/constants/app_colors.dart';
 import '../../services/auth_service.dart';
 import '../../services/library_repository.dart';
+import '../../widgets/primary_button.dart';
 import '../home_screen.dart';
 import 'email_verification_screen.dart';
 
@@ -19,6 +20,8 @@ class _AuthScreenState extends State<AuthScreen> {
   bool _isSignUp = false;
   bool _isLoading = false;
   bool _obscurePassword = true;
+
+  final _formKey = GlobalKey<FormState>();
 
   // Controllers
   final TextEditingController _emailController = TextEditingController();
@@ -54,6 +57,7 @@ class _AuthScreenState extends State<AuthScreen> {
   // SIGN IN
   // -------------------------------------------------------------
   Future<void> _handleSignIn() async {
+    if (!_formKey.currentState!.validate()) return;
     setState(() => _isLoading = true);
     final res = await _auth.signIn(
       email: _emailController.text,
@@ -85,6 +89,7 @@ class _AuthScreenState extends State<AuthScreen> {
   // SIGN UP
   // -------------------------------------------------------------
   Future<void> _handleSignUp() async {
+    if (!_formKey.currentState!.validate()) return;
     setState(() => _isLoading = true);
     final res = await _auth.signUp(
       email: _emailController.text,
@@ -359,109 +364,137 @@ class _AuthScreenState extends State<AuthScreen> {
 
                 const SizedBox(height: 20),
 
-                // Sign Up: Name Field
-                if (_isSignUp) ...[
-                  TextField(
-                    controller: _nameController,
-                    decoration: const InputDecoration(
-                      labelText: 'Full Name',
-                      hintText: 'e.g. Priya Sharma',
-                      prefixIcon: Icon(Icons.person_outline),
-                    ),
-                  ),
-                  const SizedBox(height: 14),
-                ],
-
-                // Email Field
-                TextField(
-                  controller: _emailController,
-                  keyboardType: TextInputType.emailAddress,
-                  decoration: const InputDecoration(
-                    labelText: 'Email Address',
-                    hintText: 'name@example.com',
-                    prefixIcon: Icon(Icons.email_outlined),
-                  ),
-                ),
-
-                const SizedBox(height: 14),
-
-                // Password Field
-                TextField(
-                  controller: _passwordController,
-                  obscureText: _obscurePassword,
-                  decoration: InputDecoration(
-                    labelText: 'Password',
-                    hintText: '••••••••',
-                    prefixIcon: const Icon(Icons.lock_outline),
-                    suffixIcon: IconButton(
-                      icon: Icon(
-                        _obscurePassword ? Icons.visibility_outlined : Icons.visibility_off_outlined,
-                        size: 18,
-                      ),
-                      onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
-                    ),
-                  ),
-                ),
-
-                // Forgot Password Button (Only on Sign In)
-                if (!_isSignUp) ...[
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: TextButton(
-                      onPressed: _showForgotPasswordDialog,
-                      style: TextButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
-                      ),
-                      child: const Text(
-                        'Forgot Password?',
-                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.primaryLight),
-                      ),
-                    ),
-                  ),
-                ] else ...[
-                  const SizedBox(height: 14),
-                  // Sign Up: Role Selection
-                  const Text(
-                    'I am joining as:',
-                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textSecondary),
-                  ),
-                  const SizedBox(height: 6),
-                  Row(
+                // Form Container
+                Form(
+                  key: _formKey,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      Expanded(
-                        child: ChoiceChip(
-                          label: const Text('Member'),
-                          selected: _selectedRole == 'member',
-                          avatar: const Icon(Icons.person_outline, size: 16),
-                          onSelected: (_) => setState(() => _selectedRole = 'member'),
+                      // Sign Up: Name Field
+                      if (_isSignUp) ...[
+                        TextFormField(
+                          controller: _nameController,
+                          decoration: const InputDecoration(
+                            labelText: 'Full Name',
+                            hintText: 'e.g. Priya Sharma',
+                            prefixIcon: Icon(Icons.person_outline),
+                          ),
+                          validator: (val) {
+                            if (_isSignUp && (val == null || val.trim().isEmpty)) {
+                              return 'Please enter your full name';
+                            }
+                            return null;
+                          },
                         ),
+                        const SizedBox(height: 14),
+                      ],
+
+                      // Email Field
+                      TextFormField(
+                        controller: _emailController,
+                        keyboardType: TextInputType.emailAddress,
+                        decoration: const InputDecoration(
+                          labelText: 'Email Address',
+                          hintText: 'name@example.com',
+                          prefixIcon: Icon(Icons.email_outlined),
+                        ),
+                        validator: (val) {
+                          if (val == null || val.trim().isEmpty) {
+                            return 'Please enter your email';
+                          }
+                          if (!val.contains('@') || !val.contains('.')) {
+                            return 'Please enter a valid email address';
+                          }
+                          return null;
+                        },
                       ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: ChoiceChip(
-                          label: const Text('Librarian Staff'),
-                          selected: _selectedRole == 'librarian',
-                          avatar: const Icon(Icons.admin_panel_settings_outlined, size: 16),
-                          onSelected: (_) => setState(() => _selectedRole = 'librarian'),
+
+                      const SizedBox(height: 14),
+
+                      // Password Field
+                      TextFormField(
+                        controller: _passwordController,
+                        obscureText: _obscurePassword,
+                        decoration: InputDecoration(
+                          labelText: 'Password',
+                          hintText: '••••••••',
+                          prefixIcon: const Icon(Icons.lock_outline),
+                          suffixIcon: IconButton(
+                            icon: Icon(
+                              _obscurePassword ? Icons.visibility_outlined : Icons.visibility_off_outlined,
+                              size: 18,
+                            ),
+                            onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+                          ),
                         ),
+                        validator: (val) {
+                          if (val == null || val.isEmpty) {
+                            return 'Please enter your password';
+                          }
+                          if (val.length < 6) {
+                            return 'Password must be at least 6 characters';
+                          }
+                          return null;
+                        },
+                      ),
+
+                      // Forgot Password Button (Only on Sign In)
+                      if (!_isSignUp) ...[
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: TextButton(
+                            onPressed: _showForgotPasswordDialog,
+                            style: TextButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+                            ),
+                            child: const Text(
+                              'Forgot Password?',
+                              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.primaryLight),
+                            ),
+                          ),
+                        ),
+                      ] else ...[
+                        const SizedBox(height: 14),
+                        // Sign Up: Role Selection
+                        const Text(
+                          'I am joining as:',
+                          style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textSecondary),
+                        ),
+                        const SizedBox(height: 6),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: ChoiceChip(
+                                label: const Text('Member'),
+                                selected: _selectedRole == 'member',
+                                avatar: const Icon(Icons.person_outline, size: 16),
+                                onSelected: (_) => setState(() => _selectedRole = 'member'),
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: ChoiceChip(
+                                label: const Text('Librarian Staff'),
+                                selected: _selectedRole == 'librarian',
+                                avatar: const Icon(Icons.admin_panel_settings_outlined, size: 16),
+                                onSelected: (_) => setState(() => _selectedRole = 'librarian'),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 14),
+                      ],
+
+                      const SizedBox(height: 10),
+
+                      // Reusable Primary Button
+                      PrimaryButton(
+                        label: _isSignUp ? 'Create Account & Verify' : 'Sign In',
+                        isLoading: _isLoading,
+                        onPressed: _isLoading ? null : (_isSignUp ? _handleSignUp : _handleSignIn),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 14),
-                ],
-
-                const SizedBox(height: 10),
-
-                // Submit Button
-                ElevatedButton(
-                  onPressed: _isLoading ? null : (_isSignUp ? _handleSignUp : _handleSignIn),
-                  child: _isLoading
-                      ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                        )
-                      : Text(_isSignUp ? 'Create Account & Verify' : 'Sign In'),
                 ),
 
                 const SizedBox(height: 20),

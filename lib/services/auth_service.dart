@@ -136,7 +136,7 @@ class AuthService extends ChangeNotifier {
           isEmailVerified: true,
         );
       }
-      notifyListeners();
+      _notifyStateChange();
       return AuthResult(success: true, message: 'Signed in successfully.');
     } on FirebaseAuthException catch (e) {
       return AuthResult(success: false, message: e.message ?? 'Authentication failed.');
@@ -190,7 +190,7 @@ class AuthService extends ChangeNotifier {
           isEmailVerified: false, // Triggers email verification workflow
         );
       }
-      notifyListeners();
+      _notifyStateChange();
       return AuthResult(
         success: true,
         message: 'Account created! Verification email sent to $cleanEmail.',
@@ -265,14 +265,14 @@ class AuthService extends ChangeNotifier {
       final verified = fbUser?.emailVerified ?? false;
       if (_currentUser != null) {
         _currentUser = _currentUser!.copyWith(isEmailVerified: verified);
-        notifyListeners();
+        _notifyStateChange();
       }
       return verified;
     } else {
       // In demo mode: instantly verify on user request
       if (_currentUser != null) {
         _currentUser = _currentUser!.copyWith(isEmailVerified: true);
-        notifyListeners();
+        _notifyStateChange();
       }
       return true;
     }
@@ -286,7 +286,7 @@ class AuthService extends ChangeNotifier {
       await FirebaseAuth.instance.signOut();
     }
     _currentUser = null;
-    notifyListeners();
+    _notifyStateChange();
   }
 }
 

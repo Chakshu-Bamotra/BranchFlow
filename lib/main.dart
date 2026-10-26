@@ -3,6 +3,7 @@ import 'core/theme/app_theme.dart';
 import 'screens/auth/auth_screen.dart';
 import 'screens/auth/email_verification_screen.dart';
 import 'screens/home_screen.dart';
+import 'screens/splash_screen.dart';
 import 'services/auth_service.dart';
 
 void main() {
@@ -19,7 +20,7 @@ class BranchFlowApp extends StatelessWidget {
       title: 'BranchFlow - Cross-Branch Library Network',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.lightTheme,
-      home: const AuthWrapper(),
+      home: const SplashScreen(),
     );
   }
 }
