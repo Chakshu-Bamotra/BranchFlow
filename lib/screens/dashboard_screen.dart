@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../core/constants/app_colors.dart';
+import '../services/auth_service.dart';
 import '../services/library_repository.dart';
 import '../widgets/stat_card.dart';
 import '../widgets/status_badge.dart';
@@ -80,6 +81,14 @@ class DashboardScreen extends StatelessWidget {
                   },
                 ),
               ),
+              IconButton(
+                tooltip: 'Sign Out / Switch Account',
+                icon: const Icon(Icons.logout_rounded, size: 20, color: AppColors.textSecondary),
+                onPressed: () async {
+                  await AuthService().signOut();
+                },
+              ),
+              const SizedBox(width: 8),
             ],
           ),
           body: SingleChildScrollView(
