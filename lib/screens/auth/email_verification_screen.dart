@@ -92,8 +92,9 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
             tooltip: 'Sign Out',
             icon: const Icon(Icons.logout),
             onPressed: () async {
+              final nav = Navigator.of(context);
               await _auth.signOut();
-              if (mounted) Navigator.of(context).pop();
+              if (mounted) nav.pop();
             },
           ),
         ],
@@ -192,8 +193,9 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
 
                 TextButton(
                   onPressed: () async {
+                    final nav = Navigator.of(context);
                     await _auth.signOut();
-                    if (mounted) Navigator.of(context).pop();
+                    if (mounted) nav.pop();
                   },
                   child: const Text('Back to Sign In'),
                 ),

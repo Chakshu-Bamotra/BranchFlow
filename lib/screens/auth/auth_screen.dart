@@ -181,6 +181,8 @@ class _AuthScreenState extends State<AuthScreen> {
 
                           if (ctx.mounted) {
                             Navigator.of(ctx).pop();
+                          }
+                          if (mounted) {
                             ScaffoldMessenger.of(context).showSnackBar(
                               SnackBar(
                                 content: Text(res.message),
