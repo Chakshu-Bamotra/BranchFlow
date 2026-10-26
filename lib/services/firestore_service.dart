@@ -143,4 +143,47 @@ class FirestoreService {
     await batch.commit();
     return true;
   }
+
+  // -------------------------------------------------------------
+  // CRUD OPERATIONS: CREATE, READ, UPDATE, DELETE
+  // -------------------------------------------------------------
+
+  /// C - Create: Add new record to collection
+  Future<String?> addBook(Book book) async {
+    if (_db == null) return null;
+    final docRef = await booksRef!.add(book);
+    return docRef.id;
+  }
+
+  /// R - Read (Single Document): Fetch one record by ID
+  Future<Book?> getBookById(String id) async {
+    if (_db == null) return null;
+    final snapshot = await booksRef!.doc(id).get();
+    return snapshot.data();
+  }
+
+  /// R - Read (Collection): Fetch all records once with get()
+  Future<List<Book>> getAllBooks() async {
+    if (_db == null) return [];
+    final snapshot = await booksRef!.get();
+    return snapshot.docs.map((doc) => doc.data()).toList();
+  }
+
+  /// U - Update: Modify specific fields by Document ID
+  Future<bool> updateBookStatus(String id, BookStatus status, {String? currentBranchId}) async {
+    if (_db == null) return false;
+    final Map<String, dynamic> updates = {'status': status.key};
+    if (currentBranchId != null) {
+      updates['currentBranchId'] = currentBranchId;
+    }
+    await _db!.collection('books').doc(id).update(updates);
+    return true;
+  }
+
+  /// D - Delete: Remove document by ID
+  Future<bool> deleteBook(String id) async {
+    if (_db == null) return false;
+    await _db!.collection('books').doc(id).delete();
+    return true;
+  }
 }
