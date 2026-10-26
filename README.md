@@ -54,3 +54,61 @@ A network of community libraries allows members to borrow books from any branch,
 - **Week 3 (Cross-Branch Return & Scanner):** `mobile_scanner` integration, instant loan discharge logic, penalty freeze timestamping.
 - **Week 4 (Transit & Reconciliation Hub):** Dispatch queue, courier transit batching, home-branch restocking verification, and digital receipt generation.
 - **Week 5 (Security Rules, Polish & Showcase):** Firestore Security Rules enforcement, offline persistence, UI polishing, and final demo showcase.
+
+---
+
+## 📖 Sprint 2 Deliverables & Documentation Links
+
+Every requirement for the **Sprint 2 Final Submission** is documented and version-controlled:
+
+- 📋 **[Product Requirements Document (PRD)](docs/PRD.md):** 10-section comprehensive PRD detailing problem statement, user personas, screen flows, Firestore schema, out-of-scope boundaries, and definition of done.
+- 🎨 **[Mock UX & Wireframes (MOCK_UX.md)](docs/MOCK_UX.md):** Detailed wireframe layouts, 5 user modes, transition states, and edge/empty/error cases.
+- 🏗️ **[Architecture & Concepts Guide](docs/ARCHITECTURE_AND_CONCEPTS.md):** Deep-dive technical explanations for all 40 Sprint concepts (Stateful vs Stateless, Auth Streams, Storage, CRUD, Server Timestamps, Security Rules).
+- 🔒 **[Firestore Security Rules](firestore.rules):** Enforces role-based permissions (`request.auth.uid`, `isLibrarian()`, loan immutability).
+- 🗄️ **[Storage Security Rules](storage.rules):** Restricts receipt proof and book cover uploads (`5MB max`, `image/*` MIME check).
+
+---
+
+## 🚀 Getting Started & How to Run
+
+### 1. Prerequisites
+- Flutter SDK (v3.22.0 or higher)
+- Dart SDK (v3.4.0 or higher)
+
+### 2. Installation
+```bash
+git clone https://github.com/sujal-rana58/BranchFlow.git
+cd BranchFlow
+flutter pub get
+```
+
+### 3. Run the App
+BranchFlow features an intelligent dual-mode architecture: it connects to Firebase if credentials exist, and automatically falls back to an in-memory reactive state with 4 seeded branches and real catalog books.
+```bash
+# Run on Windows Desktop
+flutter run -d windows
+
+# Run on Chrome Web
+flutter run -d chrome
+
+# Run on Android / iOS
+flutter run
+```
+
+### 4. Running Automated Tests & Analyzer
+```bash
+# Run all unit and widget tests (7/7 passing)
+flutter test
+
+# Run static code analysis (0 errors, 0 warnings)
+flutter analyze
+```
+
+---
+
+## 🏆 Final Submission Checklist (SR 3.49)
+
+- [x] **10+ PRs / Distributed Commits:** Scoped commits across features (Auth, Firestore CRUD, Mobile Scanner, Transit Hub, UI Polish).
+- [x] **PRD Present:** Available in [`docs/PRD.md`](docs/PRD.md).
+- [x] **Mock UX Present:** Available in [`docs/MOCK_UX.md`](docs/MOCK_UX.md).
+- [x] **README Maintained:** Clear problem description, setup steps, test execution, and architecture overview.
