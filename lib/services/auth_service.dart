@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -49,9 +50,45 @@ class AuthService extends ChangeNotifier {
   );
 
   bool _isFirebaseAvailable = false;
+  final _authStreamController = StreamController<UserModel?>.broadcast();
 
   UserModel? get currentUser => _currentUser;
   bool get isAuthenticated => _currentUser != null;
+
+  Stream<UserModel?> get authStateChanges {
+    // Emit initial state immediately
+    Future.microtask(() => _authStreamController.add(_currentUser));
+    return _authStreamController.stream;
+  }
+
+  void _notifyStateChange() {
+    _authStreamController.add(_currentUser);
+    notifyListeners();
+  }
+
+  static String mapAuthException(FirebaseAuthException e) {
+    switch (e.code) {
+      case 'invalid-credential':
+      case 'wrong-password':
+        return 'Incorrect email or password. Please verify your credentials.';
+      case 'user-not-found':
+        return 'No registered account found with this email.';
+      case 'email-already-in-use':
+        return 'An account already exists with this email. Please sign in instead.';
+      case 'weak-password':
+        return 'Password is too weak. Please use at least 6 characters.';
+      case 'invalid-email':
+        return 'Please enter a valid email address.';
+      case 'user-disabled':
+        return 'This library account has been temporarily disabled. Contact support.';
+      case 'too-many-requests':
+        return 'Too many unsuccessful attempts. Please try again in a few moments.';
+      case 'network-request-failed':
+        return 'Network connection error. Please verify your internet connection.';
+      default:
+        return e.message ?? 'Authentication error occurred.';
+    }
+  }
 
   void checkFirebaseStatus() {
     try {
