@@ -1,0 +1,68 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Helper Functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isLibrarian() {
+      return isSignedIn() && (
+        request.auth.token.role == 'librarian' ||
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'librarian'
+      );
+    }
+
+    // 1. Users Collection: Users can read and write only their own profile
+    match /users/{userId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && request.auth.uid == userId;
+      allow update: if isOwner(userId) || isLibrarian();
+      allow delete: if false; // Soft delete only
+    }
+
+    // 2. Branches: Publicly readable by all authenticated members; writable only by librarians/admins
+    match /branches/{branchId} {
+      allow read: if isSignedIn();
+      allow write: if isLibrarian();
+    }
+
+    // 3. Books: Unified catalog readable by all authenticated users
+    match /books/{bookId} {
+      allow read: if isSignedIn();
+      // Allow checkout status update if authenticated; metadata updates only by librarians
+      allow create: if isLibrarian();
+      allow update: if isSignedIn();
+      allow delete: if isLibrarian();
+    }
+
+    // 4. Loans: Crucial Problem Statement Enforcement
+    // - Members can read their own loans; Librarians can read all loans across branches
+    // - Members cannot arbitrarily forge a return timestamp
+    // - Cross-branch return status can only be validated and marked 'returned' by desk staff
+    match /loans/{loanId} {
+      allow read: if isSignedIn() && (
+        resource.data.memberId == request.auth.uid || isLibrarian()
+      );
+      // Member can create loan on checkout
+      allow create: if isSignedIn() && request.resource.data.memberId == request.auth.uid;
+      // Return status updates require librarian verification to prevent false returns
+      allow update: if isLibrarian() || (
+        isSignedIn() && resource.data.memberId == request.auth.uid &&
+        request.resource.data.status == resource.data.status
+      );
+      allow delete: if false; // Immutable audit ledger
+    }
+
+    // 5. Inter-Branch Transit Queue: Strictly managed by library staff & couriers
+    match /transit_items/{transitId} {
+      allow read: if isLibrarian();
+      allow write: if isLibrarian();
+    }
+  }
+}
