@@ -1,0 +1,46 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isLibrarian() {
+      return isSignedIn() && (
+        request.auth.token.role == 'librarian'
+      );
+    }
+
+    // 1. Return Receipt Photos / Book Condition Proof:
+    // Drop-off desk librarians or returning members upload proof of physical return
+    match /receipts/{loanId}/{filename} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn() && (
+        request.resource.size < 5 * 1024 * 1024 && // 5MB max
+        request.resource.contentType.matches('image/.*')
+      );
+    }
+
+    // 2. Book Cover Images:
+    // Stored references for network catalog display
+    match /books/{bookId}/{filename} {
+      allow read: if isSignedIn();
+      allow write: if isLibrarian() && (
+        request.resource.size < 5 * 1024 * 1024 &&
+        request.resource.contentType.matches('image/.*')
+      );
+    }
+
+    // 3. User Avatars:
+    // Scoped strictly per-user path: users/{uid}/avatar.jpg
+    match /users/{userId}/{filename} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn() && request.auth.uid == userId && (
+        request.resource.size < 2 * 1024 * 1024 &&
+        request.resource.contentType.matches('image/.*')
+      );
+    }
+  }
+}
