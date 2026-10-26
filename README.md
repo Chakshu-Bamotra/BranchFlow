@@ -54,3 +54,110 @@ A network of community libraries allows members to borrow books from any branch,
 - **Week 3 (Cross-Branch Return & Scanner):** `mobile_scanner` integration, instant loan discharge logic, penalty freeze timestamping.
 - **Week 4 (Transit & Reconciliation Hub):** Dispatch queue, courier transit batching, home-branch restocking verification, and digital receipt generation.
 - **Week 5 (Security Rules, Polish & Showcase):** Firestore Security Rules enforcement, offline persistence, UI polishing, and final demo showcase.
+
+---
+
+## 📖 Sprint 2 Deliverables & Documentation Links
+
+Every requirement for the **Sprint 2 Final Submission** is documented and version-controlled:
+
+- 📋 **[Product Requirements Document (PRD)](docs/PRD.md):** 10-section comprehensive PRD detailing problem statement, user personas, screen flows, Firestore schema, out-of-scope boundaries, and definition of done.
+- 🎨 **[Mock UX & Wireframes (MOCK_UX.md)](docs/MOCK_UX.md):** Detailed wireframe layouts, 5 user modes, transition states, and edge/empty/error cases.
+- 🏗️ **[Architecture & Concepts Guide](docs/ARCHITECTURE_AND_CONCEPTS.md):** Deep-dive technical explanations for all 40 Sprint concepts (Stateful vs Stateless, Auth Streams, Storage, CRUD, Server Timestamps, Security Rules).
+- 🔒 **[Firestore Security Rules](firestore.rules):** Enforces role-based permissions (`request.auth.uid`, `isLibrarian()`, loan immutability).
+- 🗄️ **[Storage Security Rules](storage.rules):** Restricts receipt proof and book cover uploads (`5MB max`, `image/*` MIME check).
+
+---
+
+## 🚀 Getting Started & How to Run
+
+### 1. Prerequisites
+- Flutter SDK (v3.22.0 or higher)
+- Dart SDK (v3.4.0 or higher)
+
+### 2. Installation
+```bash
+git clone https://github.com/sujal-rana58/BranchFlow.git
+cd BranchFlow
+flutter pub get
+```
+
+### 3. Run the App
+BranchFlow features an intelligent dual-mode architecture: it connects to Firebase if credentials exist, and automatically falls back to an in-memory reactive state with 4 seeded branches and real catalog books.
+```bash
+# Run on Windows Desktop
+flutter run -d windows
+
+# Run on Chrome Web
+flutter run -d chrome
+
+# Run on Android / iOS
+flutter run
+```
+
+### 4. Running Automated Tests & Analyzer
+```bash
+# Run all 11 unit, widget, and model tests (100% passing)
+flutter test
+
+# Run static code analysis (0 errors, 0 warnings, 0 deprecations)
+flutter analyze
+```
+
+---
+
+## 🧪 Interactive Testing & Evaluation Walkthrough
+
+BranchFlow contains built-in test fixtures and simulators so you can evaluate all features on desktop, browser, or emulator:
+
+### 1. Instant Demo Login (Auth & Persistent Session)
+- On the launch screen, tap **"Quick Fill Member"** (`member@branchflow.lib` / `password123`) or **"Quick Fill Librarian"** (`staff@branchflow.lib` / `password123`).
+- Tap **Forgot Password** to test password reset dialog feedback.
+- Tap **Sign Up** to test input validation and Email Verification gating.
+
+### 2. Cross-Branch Return Desk (The Problem Solver)
+1. Switch to the **Return Desk** tab (barcode icon).
+2. The drop-down shows the currently active return branch (e.g., **Westside Community Library**).
+3. Tap any book under **"Test Barcode Simulator"** (e.g., *Clean Code*, whose home branch is Central).
+4. **Immediate Result:** 
+   - A digital **Verified Return Certificate** appears.
+   - Borrower liability is instantly cleared at the exact current timestamp.
+   - Accruing fines/penalties are frozen to **$0.00**.
+   - The book is safely queued into **Holding Staging** at Westside rather than disappearing into a void!
+
+### 3. Courier Transit Hub (Physical Rebalancing)
+1. Switch to the **Transit Hub** tab.
+2. Under **Holding Staging**, tap **"Dispatch with Courier"** to assign a batch code and put it in transit.
+3. Under **In Transit**, tap **"Mark Restocked"** when the courier reaches the home branch (Central).
+4. The book's status returns to **Available** at Central Library with zero inventory discrepancies.
+
+### 4. Unified Catalog Search & Multi-Branch Filters
+- Search by keyword or author (real-time `onChanged` filter).
+- Tap branch chips (**Central**, **North**, **West**, **East**) or status chips (**Available**, **Borrowed**, **In Holding**) to test multi-tier filtering.
+
+---
+
+## 🔧 Troubleshooting Common Flutter Issues
+
+- **Port or process lock on Windows**:
+  ```powershell
+  flutter clean
+  flutter pub get
+  ```
+- **Run on a specific browser if Chrome isn't default**:
+  ```powershell
+  flutter run -d edge
+  # or
+  flutter run -d windows
+  ```
+- **Firebase Connection Optionality**:
+  The application runs out of the box in **Offline-First Reactive Mode** with complete mock branches and inventory. To link your own live Google Cloud Firebase project, simply run `flutterfire configure` to generate `lib/firebase_options.dart`.
+
+---
+
+## 🏆 Final Submission Checklist (SR 3.49)
+
+- [x] **10+ PRs / Distributed Commits:** Scoped commits across features (Auth, Firestore CRUD, Mobile Scanner, Transit Hub, UI Polish).
+- [x] **PRD Present:** Available in [`docs/PRD.md`](docs/PRD.md).
+- [x] **Mock UX Present:** Available in [`docs/MOCK_UX.md`](docs/MOCK_UX.md).
+- [x] **README Maintained:** Clear problem description, setup steps, test execution, troubleshooting, and architecture overview.
