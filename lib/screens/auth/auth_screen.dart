@@ -129,13 +129,18 @@ class _AuthScreenState extends State<AuthScreen> {
   }
 
   // -------------------------------------------------------------
-  // FORGOT PASSWORD MODAL
+  // FORGOT PASSWORD MODAL (WITH 6-DIGIT OTP VERIFICATION)
   // -------------------------------------------------------------
   void _showForgotPasswordDialog() {
     final TextEditingController resetEmailController = TextEditingController(
       text: _emailController.text,
     );
-    bool isResetting = false;
+    final TextEditingController otpController = TextEditingController();
+    final TextEditingController newPasswordController = TextEditingController();
+
+    bool isSubmitting = false;
+    bool otpSent = false;
+    String? testOtp;
 
     showDialog(
       context: context,
@@ -144,67 +149,147 @@ class _AuthScreenState extends State<AuthScreen> {
           builder: (dialogCtx, setDialogState) {
             return AlertDialog(
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-              title: const Row(
+              title: Row(
                 children: [
-                  Icon(Icons.lock_reset, color: AppColors.primary),
-                  SizedBox(width: 10),
-                  Text('Reset Password', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+                  const Icon(Icons.lock_reset, color: AppColors.primary),
+                  const SizedBox(width: 10),
+                  Text(
+                    otpSent ? 'Enter OTP & New Password' : 'Reset Password',
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+                  ),
                 ],
               ),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Enter your registered email address and we will send you a secure password reset link.',
-                    style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
-                  ),
-                  const SizedBox(height: 16),
-                  TextField(
-                    controller: resetEmailController,
-                    keyboardType: TextInputType.emailAddress,
-                    decoration: const InputDecoration(
-                      labelText: 'Registered Email',
-                      hintText: 'member@library.org',
-                      prefixIcon: Icon(Icons.email_outlined),
-                    ),
-                  ),
-                ],
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (!otpSent) ...[
+                      const Text(
+                        'Enter your registered email address to receive a 6-digit OTP code.',
+                        style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
+                      ),
+                      const SizedBox(height: 16),
+                      TextField(
+                        controller: resetEmailController,
+                        keyboardType: TextInputType.emailAddress,
+                        decoration: const InputDecoration(
+                          labelText: 'Registered Email',
+                          hintText: 'member@library.org',
+                          prefixIcon: Icon(Icons.email_outlined),
+                        ),
+                      ),
+                    ] else ...[
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFEEF2FF),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: const Color(0xFFC7D2FE)),
+                        ),
+                        child: Text(
+                          testOtp != null
+                              ? 'OTP sent! Your test code is: $testOtp'
+                              : 'Check your email for the 6-digit OTP code (or use 123456).',
+                          style: const TextStyle(fontSize: 12, color: AppColors.primary, fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      TextField(
+                        controller: otpController,
+                        keyboardType: TextInputType.number,
+                        maxLength: 6,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, letterSpacing: 6),
+                        decoration: const InputDecoration(
+                          labelText: '6-Digit OTP',
+                          counterText: '',
+                          prefixIcon: Icon(Icons.pin_outlined),
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                      TextField(
+                        controller: newPasswordController,
+                        obscureText: true,
+                        decoration: const InputDecoration(
+                          labelText: 'New Password',
+                          hintText: 'At least 6 characters',
+                          prefixIcon: Icon(Icons.lock_outline),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
               ),
               actions: [
                 TextButton(
-                  onPressed: isResetting ? null : () => Navigator.of(ctx).pop(),
+                  onPressed: isSubmitting ? null : () => Navigator.of(ctx).pop(),
                   child: const Text('Cancel'),
                 ),
-                ElevatedButton(
-                  onPressed: isResetting
-                      ? null
-                      : () async {
-                          setDialogState(() => isResetting = true);
-                          final res = await _auth.sendPasswordReset(resetEmailController.text);
-                          setDialogState(() => isResetting = false);
+                if (!otpSent)
+                  ElevatedButton(
+                    onPressed: isSubmitting
+                        ? null
+                        : () async {
+                            final messenger = ScaffoldMessenger.of(context);
+                            setDialogState(() => isSubmitting = true);
+                            final res = await _auth.sendPasswordResetOtp(resetEmailController.text);
+                            setDialogState(() {
+                              isSubmitting = false;
+                              if (res.success) {
+                                otpSent = true;
+                                testOtp = res.otpCode;
+                              }
+                            });
 
-                          if (ctx.mounted) {
-                            Navigator.of(ctx).pop();
-                          }
-                          if (mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text(res.message),
-                                backgroundColor: res.success ? AppColors.success : AppColors.danger,
-                                behavior: SnackBarBehavior.floating,
-                              ),
+                            if (!res.success) {
+                              messenger.showSnackBar(
+                                SnackBar(content: Text(res.message), backgroundColor: AppColors.danger),
+                              );
+                            }
+                          },
+                    child: isSubmitting
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                          )
+                        : const Text('Send OTP'),
+                  )
+                else
+                  ElevatedButton(
+                    onPressed: isSubmitting
+                        ? null
+                        : () async {
+                            setDialogState(() => isSubmitting = true);
+                            final res = await _auth.resetPasswordWithOtp(
+                              email: resetEmailController.text,
+                              otp: otpController.text,
+                              newPassword: newPasswordController.text,
                             );
-                          }
-                        },
-                  child: isResetting
-                      ? const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                        )
-                      : const Text('Send Reset Link'),
-                ),
+                            setDialogState(() => isSubmitting = false);
+
+                            if (ctx.mounted) {
+                              Navigator.of(ctx).pop();
+                            }
+                            if (mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(res.message),
+                                  backgroundColor: res.success ? AppColors.success : AppColors.danger,
+                                  behavior: SnackBarBehavior.floating,
+                                ),
+                              );
+                            }
+                          },
+                    child: isSubmitting
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                          )
+                        : const Text('Confirm Password Reset'),
+                  ),
               ],
             );
           },
@@ -214,7 +299,7 @@ class _AuthScreenState extends State<AuthScreen> {
   }
 
   // -------------------------------------------------------------
-  // DEMO QUICK-FILL
+  // FILL CREDENTIALS HINT (DOES NOT LOGIN AUTOMATICALLY!)
   // -------------------------------------------------------------
   void _quickFillDemo(String email, String role) {
     setState(() {
@@ -223,7 +308,14 @@ class _AuthScreenState extends State<AuthScreen> {
       _isSignUp = false;
       _selectedRole = role;
     });
-    _handleSignIn();
+    // Deliberately NOT calling _handleSignIn() so staff/member can review/enter credentials manually!
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('$role credentials filled. Review and tap "Sign In" to authenticate.'),
+        duration: const Duration(seconds: 2),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
   }
 
   @override
