@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'firebase_options.dart';
 import 'core/theme/app_theme.dart';
 import 'screens/auth/auth_screen.dart';
 import 'screens/auth/email_verification_screen.dart';
@@ -6,8 +8,15 @@ import 'screens/home_screen.dart';
 import 'screens/splash_screen.dart';
 import 'services/auth_service.dart';
 
-void main() {
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  try {
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
+  } catch (e) {
+    debugPrint('Firebase init notice: $e');
+  }
   runApp(const BranchFlowApp());
 }
 
