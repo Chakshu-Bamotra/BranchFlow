@@ -137,9 +137,9 @@ class AuthService extends ChangeNotifier {
           );
         } on FirebaseAuthException catch (e) {
           // If demo user does not exist in Firebase Auth yet, auto-provision it
-          final isDemoAccount = cleanEmail.contains('library.org') ||
-              cleanEmail.contains('branchflow.lib') ||
-              cleanEmail.contains('priya') ||
+          final isDemoAccount = cleanEmail.contains('branchflow.lib') ||
+              cleanEmail.contains('library.org') ||
+              cleanEmail.contains('member') ||
               cleanEmail.contains('staff');
 
           if (isDemoAccount && (e.code == 'invalid-credential' || e.code == 'user-not-found')) {

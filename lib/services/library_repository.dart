@@ -24,7 +24,7 @@ class LibraryRepository extends ChangeNotifier {
   UserRole _currentRole = UserRole.librarian;
   String _activeBranchId = 'branch_westside'; // Default staff view at Westside
   final String _currentMemberId = 'MEM-4021';
-  final String _currentMemberName = 'Priya Sharma';
+  final String _currentMemberName = 'Library Member';
 
   // Data Stores
   List<Branch> _branches = [];
