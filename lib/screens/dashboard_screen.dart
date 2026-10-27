@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../core/constants/app_colors.dart';
 import '../services/auth_service.dart';
 import '../services/library_repository.dart';
+import '../services/firestore_seeder.dart';
 import '../widgets/stat_card.dart';
 import '../widgets/status_badge.dart';
 import 'return_receipt_screen.dart';
@@ -80,6 +81,39 @@ class DashboardScreen extends StatelessWidget {
                     );
                   },
                 ),
+              ),
+              IconButton(
+                tooltip: 'Sync / Seed Live Cloud Data',
+                icon: const Icon(Icons.cloud_upload_outlined, size: 20, color: AppColors.primary),
+                onPressed: () async {
+                  final messenger = ScaffoldMessenger.of(context);
+                  messenger.showSnackBar(
+                    const SnackBar(
+                      content: Row(
+                        children: [
+                          SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                          ),
+                          SizedBox(width: 12),
+                          Text('Checking Firebase connection and seeding...'),
+                        ],
+                      ),
+                      duration: Duration(seconds: 1),
+                    ),
+                  );
+
+                  final res = await FirestoreSeeder.seedInitialData();
+                  messenger.showSnackBar(
+                    SnackBar(
+                      content: Text(res.message),
+                      backgroundColor: res.success ? AppColors.success : AppColors.danger,
+                      behavior: SnackBarBehavior.floating,
+                      duration: const Duration(seconds: 4),
+                    ),
+                  );
+                },
               ),
               IconButton(
                 tooltip: 'Sign Out / Switch Account',
