@@ -23,22 +23,22 @@ class BranchChip extends StatelessWidget {
     IconData icon = Icons.location_on_outlined;
 
     if (isHome) {
-      bg = const Color(0xFFEEF2FF);
-      border = const Color(0xFFC7D2FE);
+      bg = AppColors.originPillBg;
+      border = AppColors.originPillBorder;
       text = AppColors.primary;
       icon = Icons.home_outlined;
     } else if (isCurrent) {
       bg = AppColors.accentSoft;
-      border = AppColors.accentLight.withValues(alpha: 0.4);
-      text = AppColors.accent;
+      border = const Color(0xFFD4E8DA);
+      text = AppColors.primary;
       icon = Icons.place_outlined;
     }
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
       decoration: BoxDecoration(
         color: bg,
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(12),
         border: Border.all(color: border, width: 1),
       ),
       child: Row(

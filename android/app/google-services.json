@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "789746893835",
+    "project_id": "branchflow-production",
+    "storage_bucket": "branchflow-production.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:789746893835:android:9db9e2905709c83138b30e",
+        "android_client_info": {
+          "package_name": "com.kalvium.libraryapp.branch_flow"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDybg7RS8zZgIqiqpJOg7cY003QIA-zKQk"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

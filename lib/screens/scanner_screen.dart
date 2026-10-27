@@ -46,7 +46,7 @@ class _ScannerScreenState extends State<ScannerScreen> {
     final result = _repo.processBookReturn(
       barcode: barcode,
       returnBranchId: _repo.activeBranchId,
-      staffName: 'Desk Staff (${_repo.activeBranch?.name ?? "Branch"})',
+      staffName: 'Self-Service Drop-Box (${_repo.activeBranch?.name ?? "Branch"})',
     );
 
     setState(() => _isProcessing = false);
@@ -73,12 +73,13 @@ class _ScannerScreenState extends State<ScannerScreen> {
         final activeLoans = _repo.loans.where((l) => l.status == LoanStatus.active).toList();
 
         return Scaffold(
+          backgroundColor: AppColors.background,
           appBar: AppBar(
-            title: const Text('Cross-Branch Return Desk'),
+            title: const Text('Drop-Box Scanner'),
             actions: [
               IconButton(
                 tooltip: _useLiveCamera ? 'Switch to Barcode Simulator' : 'Switch to Camera Scanner',
-                icon: Icon(_useLiveCamera ? Icons.keyboard : Icons.camera_alt_outlined),
+                icon: Icon(_useLiveCamera ? Icons.keyboard : Icons.camera_alt_outlined, color: AppColors.primary),
                 onPressed: () {
                   setState(() {
                     _useLiveCamera = !_useLiveCamera;
@@ -94,70 +95,52 @@ class _ScannerScreenState extends State<ScannerScreen> {
               children: [
                 // Receiving Branch Banner
                 Container(
-                  padding: const EdgeInsets.all(14),
+                  padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    color: AppColors.primary.withValues(alpha: 0.06),
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border.all(color: AppColors.primary.withValues(alpha: 0.15)),
+                    color: AppColors.card,
+                    borderRadius: BorderRadius.circular(18),
+                    border: Border.all(color: AppColors.cardBorder),
                   ),
                   child: Row(
                     children: [
-                      const Icon(Icons.storefront_outlined, color: AppColors.primary, size: 24),
-                      const SizedBox(width: 12),
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: AppColors.accentSoft,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: const Icon(Icons.markunread_mailbox_outlined, color: AppColors.primary, size: 24),
+                      ),
+                      const SizedBox(width: 14),
                       Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             const Text(
-                              'Receiving Drop-off Branch:',
+                              'DROP-BOX LOCATION',
                               style: TextStyle(
-                                fontSize: 11,
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
                                 color: AppColors.textSecondary,
-                                fontWeight: FontWeight.w500,
+                                letterSpacing: 0.8,
                               ),
                             ),
+                            const SizedBox(height: 2),
                             Text(
-                              _repo.activeBranch?.name ?? 'Select Branch',
+                              _repo.activeBranch?.name ?? 'Central Library',
                               style: const TextStyle(
-                                fontSize: 14,
+                                fontSize: 15,
                                 fontWeight: FontWeight.bold,
-                                color: AppColors.primaryDark,
+                                fontFamily: 'Georgia',
+                                color: AppColors.textPrimary,
                               ),
+                            ),
+                            const SizedBox(height: 2),
+                            const Text(
+                              'Cross-branch returns are instantly credited with 0 penalty delay.',
+                              style: TextStyle(fontSize: 11, color: AppColors.textSecondary),
                             ),
                           ],
-                        ),
-                      ),
-                      PopupMenuButton<String>(
-                        tooltip: 'Change Receiving Branch',
-                        initialValue: _repo.activeBranchId,
-                        onSelected: (branchId) => _repo.setActiveBranch(branchId),
-                        itemBuilder: (ctx) => _repo.branches.map((b) {
-                          return PopupMenuItem(
-                            value: b.id,
-                            child: Text(b.name),
-                          );
-                        }).toList(),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                          decoration: BoxDecoration(
-                            color: AppColors.surface,
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: AppColors.border),
-                          ),
-                          child: const Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(
-                                'Change',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w600,
-                                  color: AppColors.primary,
-                                ),
-                              ),
-                              Icon(Icons.arrow_drop_down, size: 16, color: AppColors.primary),
-                            ],
-                          ),
                         ),
                       ),
                     ],
@@ -166,196 +149,233 @@ class _ScannerScreenState extends State<ScannerScreen> {
 
                 const SizedBox(height: 18),
 
-                // Camera Scanner or Barcode Input
-                if (_useLiveCamera) ...[
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(16),
-                    child: SizedBox(
-                      height: 240,
-                      child: MobileScanner(
-                        controller: _cameraController!,
-                        onDetect: (capture) {
-                          final barcodes = capture.barcodes;
-                          for (final barcode in barcodes) {
-                            if (barcode.rawValue != null) {
-                              _handleBarcode(barcode.rawValue!);
-                              break;
+                // Scanner Viewport / Barcode Input Box
+                if (_useLiveCamera)
+                  Container(
+                    height: 240,
+                    decoration: BoxDecoration(
+                      color: Colors.black,
+                      borderRadius: BorderRadius.circular(18),
+                      border: Border.all(color: AppColors.cardBorder),
+                    ),
+                    clipBehavior: Clip.antiAlias,
+                    child: Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        MobileScanner(
+                          controller: _cameraController!,
+                          onDetect: (capture) {
+                            final barcodes = capture.barcodes;
+                            if (barcodes.isNotEmpty && barcodes.first.rawValue != null) {
+                              _handleBarcode(barcodes.first.rawValue!);
                             }
-                          }
-                        },
-                      ),
+                          },
+                        ),
+                        Container(
+                          width: 200,
+                          height: 140,
+                          decoration: BoxDecoration(
+                            border: Border.all(color: AppColors.accentLight, width: 2),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        if (_isProcessing)
+                          const Center(
+                            child: CircularProgressIndicator(color: Colors.white),
+                          ),
+                      ],
+                    ),
+                  )
+                else
+                  Container(
+                    padding: const EdgeInsets.all(18),
+                    decoration: BoxDecoration(
+                      color: AppColors.card,
+                      borderRadius: BorderRadius.circular(18),
+                      border: Border.all(color: AppColors.cardBorder),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Row(
+                          children: [
+                            Icon(Icons.qr_code_scanner, color: AppColors.primary, size: 20),
+                            SizedBox(width: 8),
+                            Text(
+                              'Drop-Box Barcode Scanner',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                                fontFamily: 'Georgia',
+                                color: AppColors.textPrimary,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        const Text(
+                          'Scan the book sticker or enter the barcode below to process instant clearance.',
+                          style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                        ),
+                        const SizedBox(height: 14),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: TextField(
+                                controller: _barcodeController,
+                                decoration: InputDecoration(
+                                  hintText: 'e.g., BOOK-DDIA-001',
+                                  hintStyle: const TextStyle(fontSize: 13, color: AppColors.textMuted),
+                                  prefixIcon: const Icon(Icons.document_scanner_outlined, color: AppColors.primary),
+                                  filled: true,
+                                  fillColor: Colors.white,
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                    borderSide: const BorderSide(color: AppColors.border),
+                                  ),
+                                ),
+                                onSubmitted: _handleBarcode,
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            ElevatedButton(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppColors.primary,
+                                padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 15),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                              ),
+                              onPressed: _isProcessing
+                                  ? null
+                                  : () => _handleBarcode(_barcodeController.text),
+                              child: _isProcessing
+                                  ? const SizedBox(
+                                      width: 16,
+                                      height: 16,
+                                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                                    )
+                                  : const Text('Return'),
+                            ),
+                          ],
+                        ),
+                      ],
                     ),
                   ),
-                  const SizedBox(height: 12),
-                ],
 
-                // Manual Barcode Input Card
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: AppColors.surface,
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: AppColors.border),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Scan or Enter Book Barcode / ISBN',
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.bold,
-                          color: AppColors.textPrimary,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      const Text(
-                        'Instant discharge clears member liability, generates receipt, and queues cross-branch transit.',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: AppColors.textSecondary,
-                        ),
-                      ),
-                      const SizedBox(height: 14),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: TextField(
-                              controller: _barcodeController,
-                              decoration: const InputDecoration(
-                                hintText: 'e.g. BF-BAR-1001',
-                                prefixIcon: Icon(Icons.qr_code_scanner, color: AppColors.primary),
-                              ),
-                              onSubmitted: _handleBarcode,
-                            ),
-                          ),
-                          const SizedBox(width: 10),
-                          ElevatedButton(
-                            onPressed: () => _handleBarcode(_barcodeController.text),
-                            child: const Text('Check In'),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
+                const SizedBox(height: 22),
 
-                const SizedBox(height: 24),
-
-                // Quick Simulation: Currently Borrowed Books
+                // Quick Scan Simulation Chips
                 Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     const Text(
-                      'Currently Borrowed Books (Quick Return Test)',
+                      'Ready for Return',
                       style: TextStyle(
-                        fontSize: 14,
+                        fontSize: 17,
                         fontWeight: FontWeight.bold,
+                        fontFamily: 'Georgia',
                         color: AppColors.textPrimary,
                       ),
                     ),
-                    Text(
-                      '${activeLoans.length} active',
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: AppColors.textSecondary,
-                        fontWeight: FontWeight.w600,
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: AppColors.primary,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Text(
+                        '${activeLoans.length}',
+                        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.white),
                       ),
                     ),
                   ],
                 ),
-                const SizedBox(height: 10),
+                const SizedBox(height: 8),
+                const Text(
+                  'Select any active loan to simulate instant cross-branch scanning:',
+                  style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                ),
+                const SizedBox(height: 12),
 
                 if (activeLoans.isEmpty)
                   Container(
-                    padding: const EdgeInsets.all(24),
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(18),
                     decoration: BoxDecoration(
-                      color: AppColors.surface,
+                      color: AppColors.card,
                       borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: AppColors.border),
+                      border: Border.all(color: AppColors.cardBorder),
                     ),
                     child: const Center(
                       child: Text(
-                        'No books currently checked out. Borrow books from the Catalog tab to test returns!',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
+                        'No books currently borrowed. Checkout from Catalog to test!',
+                        style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
                       ),
                     ),
                   )
                 else
                   ...activeLoans.map((loan) {
-                    final homeBranch = _repo.getBranchById(loan.borrowedFromBranchId);
-                    final isCrossBranch = loan.borrowedFromBranchId != _repo.activeBranchId;
+                    final isCrossBranch = loan.borrowBranchId != _repo.activeBranchId;
+                    final borrowBranch = _repo.getBranchById(loan.borrowBranchId);
 
-                    return Card(
-                      margin: const EdgeInsets.only(bottom: 12),
-                      child: Padding(
-                        padding: const EdgeInsets.all(14),
-                        child: Column(
+                    return Container(
+                      margin: const EdgeInsets.only(bottom: 10),
+                      decoration: BoxDecoration(
+                        color: AppColors.card,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: AppColors.cardBorder),
+                      ),
+                      child: ListTile(
+                        leading: Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: AppColors.primary.withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: const Icon(Icons.menu_book, color: AppColors.primary, size: 22),
+                        ),
+                        title: Text(
+                          loan.bookTitle,
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, fontFamily: 'Georgia'),
+                        ),
+                        subtitle: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: Text(
-                                    loan.bookTitle,
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 14,
-                                    ),
-                                  ),
-                                ),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                                  decoration: BoxDecoration(
-                                    color: isCrossBranch ? AppColors.warningLight : AppColors.successLight,
-                                    borderRadius: BorderRadius.circular(6),
-                                  ),
-                                  child: Text(
-                                    isCrossBranch ? '⚡ Cross-Branch' : '🏠 Same Branch',
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.bold,
-                                      color: isCrossBranch ? AppColors.warning : AppColors.success,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 6),
                             Text(
-                              'Borrower: ${loan.memberName} (${loan.memberId})',
-                              style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                              '${loan.bookAuthor} · ${loan.barcode}',
+                              style: const TextStyle(fontSize: 11, color: AppColors.textSecondary),
                             ),
-                            const SizedBox(height: 8),
-                            Row(
+                            const SizedBox(height: 4),
+                            Wrap(
+                              spacing: 6,
                               children: [
                                 BranchChip(
-                                  branchName: homeBranch?.name ?? 'Home Branch',
-                                  branchCode: homeBranch?.code,
+                                  branchName: borrowBranch?.name ?? loan.borrowBranchId,
                                   isHome: true,
                                 ),
-                                const SizedBox(width: 8),
-                                Text(
-                                  'Barcode: ${loan.bookBarcode}',
-                                  style: const TextStyle(
-                                    fontSize: 11,
-                                    fontFamily: 'monospace',
-                                    color: AppColors.textSecondary,
+                                if (isCrossBranch)
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                    decoration: BoxDecoration(
+                                      color: AppColors.warningLight,
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                    child: const Text(
+                                      'CROSS-BRANCH RETURN',
+                                      style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: AppColors.warning),
+                                    ),
                                   ),
-                                ),
                               ],
                             ),
-                            const SizedBox(height: 12),
-                            SizedBox(
-                              width: double.infinity,
-                              child: OutlinedButton.icon(
-                                icon: const Icon(Icons.login, size: 16),
-                                label: Text('Instant Return at ${_repo.activeBranch?.name ?? "this Branch"}'),
-                                onPressed: () => _handleBarcode(loan.bookBarcode),
-                              ),
-                            ),
                           ],
+                        ),
+                        trailing: ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.primary,
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          ),
+                          onPressed: () => _handleBarcode(loan.barcode),
+                          child: const Text('Scan Return', style: TextStyle(fontSize: 12)),
                         ),
                       ),
                     );

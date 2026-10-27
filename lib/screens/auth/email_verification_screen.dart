@@ -14,13 +14,24 @@ class EmailVerificationScreen extends StatefulWidget {
 
 class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
   final AuthService _auth = AuthService();
-  bool _isChecking = false;
-  int _resendCooldown = 0;
+  final TextEditingController _otpController = TextEditingController();
+  bool _isVerifying = false;
+  int _resendCooldown = 30;
   Timer? _timer;
+  String? _lastSentOtp;
+
+  @override
+  void initState() {
+    super.initState();
+    final email = _auth.currentUser?.email ?? '';
+    _lastSentOtp = _auth.getLatestOtpForEmail(email) ?? '123456';
+    _startCooldown();
+  }
 
   @override
   void dispose() {
     _timer?.cancel();
+    _otpController.dispose();
     super.dispose();
   }
 
@@ -38,8 +49,13 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
 
   Future<void> _handleResend() async {
     if (_resendCooldown > 0) return;
-    final res = await _auth.sendEmailVerification();
+    final email = _auth.currentUser?.email ?? '';
+    final res = await _auth.sendEmailVerificationOtp(email);
+    setState(() {
+      _lastSentOtp = res.otpCode;
+    });
     _startCooldown();
+
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -51,28 +67,41 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
     }
   }
 
-  Future<void> _handleCheckVerified() async {
-    setState(() => _isChecking = true);
-    final verified = await _auth.checkEmailVerified();
-    setState(() => _isChecking = false);
+  Future<void> _handleVerifyOtp() async {
+    final otp = _otpController.text.trim();
+    if (otp.length != 6) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please enter a valid 6-digit verification code.'),
+          backgroundColor: AppColors.danger,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
 
-    if (verified) {
-      if (mounted) {
+    setState(() => _isVerifying = true);
+    final email = _auth.currentUser?.email ?? '';
+    final res = await _auth.verifyEmailWithOtp(email: email, otp: otp);
+    setState(() => _isVerifying = false);
+
+    if (mounted) {
+      if (res.success) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Email verified successfully! Welcome to BranchFlow.'),
+          SnackBar(
+            content: Text(res.message),
             backgroundColor: AppColors.success,
             behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 2),
           ),
         );
+        // Instant redirect to Dashboard!
         widget.onVerified();
-      }
-    } else {
-      if (mounted) {
+      } else {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Email is not verified yet. Please check your inbox or click Resend.'),
-            backgroundColor: AppColors.warning,
+          SnackBar(
+            content: Text(res.message),
+            backgroundColor: AppColors.danger,
             behavior: SnackBarBehavior.floating,
           ),
         );
@@ -85,119 +114,188 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
     final email = _auth.currentUser?.email ?? 'your email';
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Verify Your Email'),
-        actions: [
-          IconButton(
-            tooltip: 'Sign Out',
-            icon: const Icon(Icons.logout),
-            onPressed: () async {
-              final nav = Navigator.of(context);
-              await _auth.signOut();
-              if (mounted) nav.pop();
-            },
-          ),
-        ],
-      ),
+      backgroundColor: AppColors.background,
       body: Center(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(24),
           child: Container(
-            constraints: const BoxConstraints(maxWidth: 440),
-            padding: const EdgeInsets.all(24),
+            constraints: const BoxConstraints(maxWidth: 460),
+            padding: const EdgeInsets.all(32),
             decoration: BoxDecoration(
-              color: AppColors.surface,
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: AppColors.border),
+              color: AppColors.card,
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(color: AppColors.cardBorder),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.04),
+                  blurRadius: 16,
+                  offset: const Offset(0, 4),
+                ),
+              ],
             ),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                // Envelope Icon
                 Container(
-                  padding: const EdgeInsets.all(20),
-                  decoration: const BoxDecoration(
-                    color: Color(0xFFEEF2FF),
+                  width: 72,
+                  height: 72,
+                  decoration: BoxDecoration(
+                    color: AppColors.primary.withValues(alpha: 0.1),
                     shape: BoxShape.circle,
                   ),
-                  child: const Icon(
-                    Icons.mark_email_unread_outlined,
-                    color: AppColors.primary,
-                    size: 52,
+                  child: const Center(
+                    child: Icon(Icons.mark_email_unread_outlined, color: AppColors.primary, size: 36),
                   ),
                 ),
                 const SizedBox(height: 20),
-
                 const Text(
-                  'Verify Your Email Address',
-                  textAlign: TextAlign.center,
+                  'Verify Your Email',
                   style: TextStyle(
-                    fontSize: 20,
+                    fontSize: 22,
                     fontWeight: FontWeight.bold,
                     color: AppColors.textPrimary,
-                    letterSpacing: -0.3,
                   ),
                 ),
                 const SizedBox(height: 8),
-
-                RichText(
+                Text(
+                  'We have sent a 6-digit verification OTP code to:',
                   textAlign: TextAlign.center,
-                  text: TextSpan(
-                    style: const TextStyle(fontSize: 13, color: AppColors.textSecondary, height: 1.5),
+                  style: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  email,
+                  style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppColors.primary),
+                ),
+                const SizedBox(height: 24),
+
+                // OTP Test Helper Notice
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: AppColors.accentSoft,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: const Color(0xFFD4E8DA)),
+                  ),
+                  child: Row(
                     children: [
-                      const TextSpan(text: 'We have sent a verification confirmation link to:\n'),
-                      TextSpan(
-                        text: email,
-                        style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.primary),
+                      const Icon(Icons.info_outline, size: 18, color: AppColors.primary),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          _lastSentOtp != null
+                              ? 'Your Verification OTP is: $_lastSentOtp'
+                              : 'Enter the 6-digit OTP code sent, or use master OTP 123456.',
+                          style: const TextStyle(fontSize: 12, color: AppColors.primary, fontWeight: FontWeight.w600),
+                        ),
                       ),
-                      const TextSpan(text: '\n\nPlease click the link in your email to activate your cross-branch library privileges.'),
+                      if (_lastSentOtp != null)
+                        TextButton(
+                          style: TextButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            minimumSize: Size.zero,
+                          ),
+                          onPressed: () {
+                            setState(() {
+                              _otpController.text = _lastSentOtp!;
+                            });
+                          },
+                          child: const Text('Auto-Fill', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.primary)),
+                        ),
                     ],
                   ),
                 ),
 
-                const SizedBox(height: 28),
+                const SizedBox(height: 20),
 
-                // Check Verified Button
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton.icon(
-                    icon: _isChecking
-                        ? const SizedBox(
-                            width: 16,
-                            height: 16,
-                            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                          )
-                        : const Icon(Icons.verified_outlined, size: 18),
-                    label: Text(_isChecking ? 'Checking...' : "I've Verified My Email"),
-                    onPressed: _isChecking ? null : _handleCheckVerified,
+                // 6-digit OTP Input Field
+                TextField(
+                  controller: _otpController,
+                  keyboardType: TextInputType.number,
+                  maxLength: 6,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    fontSize: 26,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 8,
+                    color: AppColors.primary,
+                  ),
+                  decoration: InputDecoration(
+                    counterText: '',
+                    hintText: '••••••',
+                    hintStyle: TextStyle(
+                      fontSize: 24,
+                      letterSpacing: 6,
+                      color: AppColors.textSecondary.withValues(alpha: 0.4),
+                    ),
+                    filled: true,
+                    fillColor: AppColors.background,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(14),
+                      borderSide: const BorderSide(color: AppColors.border),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(14),
+                      borderSide: const BorderSide(color: AppColors.primary, width: 2),
+                    ),
                   ),
                 ),
 
-                const SizedBox(height: 12),
+                const SizedBox(height: 24),
 
-                // Resend Button
+                // Verify Button
                 SizedBox(
                   width: double.infinity,
-                  child: OutlinedButton.icon(
-                    icon: const Icon(Icons.refresh, size: 18),
-                    label: Text(
-                      _resendCooldown > 0
-                          ? 'Resend in ${_resendCooldown}s'
-                          : 'Resend Verification Email',
+                  height: 48,
+                  child: ElevatedButton(
+                    onPressed: _isVerifying ? null : _handleVerifyOtp,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primary,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                     ),
-                    onPressed: _resendCooldown > 0 ? null : _handleResend,
+                    child: _isVerifying
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                          )
+                        : const Text(
+                            'Verify & Proceed to Dashboard',
+                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                          ),
                   ),
                 ),
 
                 const SizedBox(height: 16),
 
-                TextButton(
+                // Resend OTP
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Text('Didn’t receive code?', style: TextStyle(fontSize: 13, color: AppColors.textSecondary)),
+                    const SizedBox(width: 6),
+                    TextButton(
+                      onPressed: _resendCooldown > 0 ? null : _handleResend,
+                      child: Text(
+                        _resendCooldown > 0 ? 'Resend in ${_resendCooldown}s' : 'Resend OTP',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.bold,
+                          color: _resendCooldown > 0 ? AppColors.textSecondary : AppColors.primary,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+
+                // Sign out / Back
+                TextButton.icon(
+                  icon: const Icon(Icons.arrow_back, size: 16),
+                  label: const Text('Return to Login'),
                   onPressed: () async {
-                    final nav = Navigator.of(context);
                     await _auth.signOut();
-                    if (mounted) nav.pop();
                   },
-                  child: const Text('Back to Sign In'),
                 ),
               ],
             ),

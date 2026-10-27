@@ -9,7 +9,7 @@ void main() {
       auth = AuthService();
     });
 
-    test('Sign Up creates user with unverified email requiring verification', () async {
+    test('Sign Up creates user with unverified email requiring OTP verification', () async {
       final res = await auth.signUp(
         email: 'new.member@library.org',
         password: 'securePassword123',
@@ -19,30 +19,44 @@ void main() {
 
       expect(res.success, isTrue);
       expect(res.requiresVerification, isTrue);
+      expect(res.otpCode, isNotNull);
+      expect(res.otpCode!.length, 6);
       expect(auth.currentUser, isNotNull);
       expect(auth.currentUser!.email, 'new.member@library.org');
       expect(auth.currentUser!.isEmailVerified, isFalse);
-    });
 
-    test('Email Verification confirms verification status', () async {
-      // User is currently unverified from previous step
-      expect(auth.currentUser!.isEmailVerified, isFalse);
-
-      // Trigger verification confirmation
-      final isVerified = await auth.checkEmailVerified();
-      expect(isVerified, isTrue);
+      // Verify with the generated OTP
+      final verifyRes = await auth.verifyEmailWithOtp(
+        email: 'new.member@library.org',
+        otp: res.otpCode!,
+      );
+      expect(verifyRes.success, isTrue);
       expect(auth.currentUser!.isEmailVerified, isTrue);
     });
 
-    test('Forgot Password sends reset link to registered email', () async {
-      final resetRes = await auth.sendPasswordReset('new.member@library.org');
-      expect(resetRes.success, isTrue);
-      expect(resetRes.message, contains('Password reset link sent'));
+    test('Forgot Password OTP generation and password reset', () async {
+      final otpRes = await auth.sendPasswordResetOtp('new.member@library.org');
+      expect(otpRes.success, isTrue);
+      expect(otpRes.otpCode, isNotNull);
+      expect(otpRes.otpCode!.length, 6);
 
-      // Invalid email test
-      final invalidRes = await auth.sendPasswordReset('not-an-email');
-      expect(invalidRes.success, isFalse);
-      expect(invalidRes.message, contains('valid email'));
+      // Reset password with valid OTP
+      final resetRes = await auth.resetPasswordWithOtp(
+        email: 'new.member@library.org',
+        otp: otpRes.otpCode!,
+        newPassword: 'myNewStrongPassword2026',
+      );
+      expect(resetRes.success, isTrue);
+      expect(resetRes.message, contains('Password successfully reset'));
+
+      // Invalid OTP rejection test
+      final invalidOtpRes = await auth.resetPasswordWithOtp(
+        email: 'new.member@library.org',
+        otp: '999999',
+        newPassword: 'anotherPassword',
+      );
+      expect(invalidOtpRes.success, isFalse);
+      expect(invalidOtpRes.message, contains('Invalid OTP'));
     });
 
     test('Sign Out clears active user session', () async {

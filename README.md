@@ -66,6 +66,7 @@ Every requirement for the **Sprint 2 Final Submission** is documented and versio
 - 🏗️ **[Architecture & Concepts Guide](docs/ARCHITECTURE_AND_CONCEPTS.md):** Deep-dive technical explanations for all 40 Sprint concepts (Stateful vs Stateless, Auth Streams, Storage, CRUD, Server Timestamps, Security Rules).
 - 🔒 **[Firestore Security Rules](firestore.rules):** Enforces role-based permissions (`request.auth.uid`, `isLibrarian()`, loan immutability).
 - 🗄️ **[Storage Security Rules](storage.rules):** Restricts receipt proof and book cover uploads (`5MB max`, `image/*` MIME check).
+- 🚀 **[Production Setup & Deployment Runbook](docs/PRODUCTION_SETUP_GUIDE.md):** Complete step-by-step guide to connect a live Google Firebase cloud project, deploy rules & indexes, seed initial data, and build release APK/AAB binaries.
 
 ---
 
