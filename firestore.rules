@@ -31,5 +31,10 @@ service cloud.firestore {
     match /transit_items/{transitId} {
       allow read, write: if true;
     }
+
+    // 6. OTP codes: hashed codes managed only by Cloud Functions (Admin SDK)
+    match /otp_codes/{otpId} {
+      allow read, write: if false;
+    }
   }
 }

@@ -43,11 +43,12 @@ class _AuthScreenState extends State<AuthScreen> {
     );
   }
 
-  void _navigateToVerification() {
+  void _navigateToVerification({bool sendOtpOnOpen = false}) {
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => EmailVerificationScreen(
           onVerified: _navigateToHome,
+          sendOtpOnOpen: sendOtpOnOpen,
         ),
       ),
     );
@@ -66,10 +67,10 @@ class _AuthScreenState extends State<AuthScreen> {
     setState(() => _isLoading = false);
 
     if (res.success) {
+      _syncUserRole();
       if (_auth.currentUser?.isEmailVerified == false) {
-        _navigateToVerification();
+        _navigateToVerification(sendOtpOnOpen: true);
       } else {
-        _syncUserRole();
         _navigateToHome();
       }
     } else {
@@ -140,7 +141,7 @@ class _AuthScreenState extends State<AuthScreen> {
 
     bool isSubmitting = false;
     bool otpSent = false;
-    String? testOtp;
+    String sentMessage = '';
 
     showDialog(
       context: context,
@@ -188,10 +189,30 @@ class _AuthScreenState extends State<AuthScreen> {
                           border: Border.all(color: const Color(0xFFD4E8DA)),
                         ),
                         child: Text(
-                          testOtp != null
-                              ? 'OTP sent! Your test code is: $testOtp'
-                              : 'Check your email for the 6-digit OTP code (or use 123456).',
+                          sentMessage,
                           style: const TextStyle(fontSize: 12, color: AppColors.primary, fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: TextButton(
+                          onPressed: isSubmitting
+                              ? null
+                              : () async {
+                                  final messenger = ScaffoldMessenger.of(context);
+                                  setDialogState(() => isSubmitting = true);
+                                  final res = await _auth.sendPasswordResetOtp(resetEmailController.text);
+                                  setDialogState(() {
+                                    isSubmitting = false;
+                                    if (res.success) sentMessage = res.message;
+                                  });
+                                  if (!res.success) {
+                                    messenger.showSnackBar(
+                                      SnackBar(content: Text(res.message), backgroundColor: AppColors.danger),
+                                    );
+                                  }
+                                },
+                          child: const Text('Resend code', style: TextStyle(fontSize: 12)),
                         ),
                       ),
                       const SizedBox(height: 16),
@@ -238,7 +259,7 @@ class _AuthScreenState extends State<AuthScreen> {
                               isSubmitting = false;
                               if (res.success) {
                                 otpSent = true;
-                                testOtp = res.otpCode;
+                                sentMessage = res.message;
                               }
                             });
 
@@ -269,7 +290,8 @@ class _AuthScreenState extends State<AuthScreen> {
                             );
                             setDialogState(() => isSubmitting = false);
 
-                            if (ctx.mounted) {
+                            // Keep the dialog open on failure so the user can retry the code.
+                            if (res.success && ctx.mounted) {
                               Navigator.of(ctx).pop();
                             }
                             if (mounted) {
