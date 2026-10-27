@@ -108,6 +108,10 @@ class AuthService extends ChangeNotifier {
     return otp;
   }
 
+  String? getLatestOtpForEmail(String email) {
+    return _otpCache[email.trim().toLowerCase()];
+  }
+
   // -------------------------------------------------------------
   // SIGN IN
   // -------------------------------------------------------------

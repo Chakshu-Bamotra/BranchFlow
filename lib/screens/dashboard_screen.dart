@@ -11,11 +11,13 @@ import 'return_receipt_screen.dart';
 class DashboardScreen extends StatelessWidget {
   final VoidCallback onNavigateToScanner;
   final VoidCallback onNavigateToTransit;
+  final VoidCallback onNavigateToCatalog;
 
   const DashboardScreen({
     super.key,
     required this.onNavigateToScanner,
     required this.onNavigateToTransit,
+    required this.onNavigateToCatalog,
   });
 
   void _showBranchPicker(BuildContext context, LibraryRepository repo) {
@@ -97,6 +99,339 @@ class DashboardScreen extends StatelessWidget {
     );
   }
 
+  // -------------------------------------------------------------
+  // NOTIFICATIONS SHEET (Fixes: Bell icon now opens notifications)
+  // -------------------------------------------------------------
+  void _showNotificationsSheet(BuildContext context, LibraryRepository repo) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppColors.background,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+      ),
+      builder: (ctx) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: AppColors.accentSoft,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: const Icon(Icons.notifications_active_outlined, color: AppColors.primary, size: 20),
+                    ),
+                    const SizedBox(width: 10),
+                    const Text(
+                      'Network Notifications',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        fontFamily: 'Georgia',
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                    const Spacer(),
+                    IconButton(
+                      icon: const Icon(Icons.close, size: 20, color: AppColors.textSecondary),
+                      onPressed: () => Navigator.of(ctx).pop(),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                const Text(
+                  'Real-time cross-branch synchronization and hold liability events:',
+                  style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                ),
+                const SizedBox(height: 16),
+                _notificationItem(
+                  icon: Icons.verified_user_rounded,
+                  iconColor: AppColors.primary,
+                  title: 'Instant Clearance Guarantee Active',
+                  time: 'Just now',
+                  description:
+                      'All returned books are immediately credited with zero penalty delay, even when dropped off at non-home branches.',
+                ),
+                const SizedBox(height: 10),
+                _notificationItem(
+                  icon: Icons.local_shipping_outlined,
+                  iconColor: AppColors.warning,
+                  title: 'Inter-Branch Logistics Pipeline',
+                  time: '15m ago',
+                  description:
+                      '${repo.transitCount} items currently staged or in courier transit to their original home branches.',
+                ),
+                const SizedBox(height: 10),
+                _notificationItem(
+                  icon: Icons.sync_rounded,
+                  iconColor: AppColors.accent,
+                  title: 'Unified Catalog Reconciled',
+                  time: '1h ago',
+                  description:
+                      'All 4 community branch inventories (${repo.books.length} titles) are synchronized in real-time.',
+                ),
+                const SizedBox(height: 18),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primary,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                    onPressed: () => Navigator.of(ctx).pop(),
+                    child: const Text('Mark All Read'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _notificationItem({
+    required IconData icon,
+    required Color iconColor,
+    required String title,
+    required String time,
+    required String description,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.card,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.cardBorder),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(6),
+            decoration: BoxDecoration(
+              color: iconColor.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(icon, color: iconColor, size: 18),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      title,
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppColors.textPrimary),
+                    ),
+                    Text(time, style: const TextStyle(fontSize: 10, color: AppColors.textSecondary)),
+                  ],
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  description,
+                  style: const TextStyle(fontSize: 11, color: AppColors.textSecondary, height: 1.3),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // -------------------------------------------------------------
+  // RETURN OPTIONS ACTION SHEET
+  // -------------------------------------------------------------
+  void _showReturnActionSheet(BuildContext context, Loan loan, LibraryRepository repo) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppColors.background,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+      ),
+      builder: (ctx) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Return "${loan.bookTitle}"',
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    fontFamily: 'Georgia',
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Active Drop-off Location: ${repo.activeBranch?.name ?? "Branch"}',
+                  style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                ),
+                const SizedBox(height: 18),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primary,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                    icon: const Icon(Icons.markunread_mailbox_outlined, size: 20),
+                    label: const Text(
+                      'Instant Drop-Box Return & Get Receipt',
+                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                    ),
+                    onPressed: () {
+                      Navigator.of(ctx).pop();
+                      final result = repo.processBookReturn(
+                        barcode: loan.barcode,
+                        returnBranchId: repo.activeBranchId,
+                        staffName: 'Self-Service Drop-Box (${repo.activeBranch?.name ?? "Branch"})',
+                      );
+                      if (result.success && result.loan != null) {
+                        ReturnReceiptScreen.show(context, result.loan!);
+                      }
+                    },
+                  ),
+                ),
+                const SizedBox(height: 10),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppColors.primary,
+                      side: const BorderSide(color: AppColors.primary),
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                    icon: const Icon(Icons.qr_code_scanner, size: 20),
+                    label: const Text(
+                      'Open Drop-Box Scanner Desk',
+                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                    ),
+                    onPressed: () {
+                      Navigator.of(ctx).pop();
+                      onNavigateToScanner();
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  // -------------------------------------------------------------
+  // TRANSIT ITEM DETAILS SHEET
+  // -------------------------------------------------------------
+  void _showTransitDetailsSheet(BuildContext context, TransitItem item, LibraryRepository repo) {
+    final fromBranch = repo.getBranchById(item.fromBranchId);
+    final toBranch = repo.getBranchById(item.toBranchId);
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppColors.background,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+      ),
+      builder: (ctx) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Icon(Icons.local_shipping_rounded, color: AppColors.primary, size: 22),
+                    const SizedBox(width: 8),
+                    const Text(
+                      'Courier Transit Details',
+                      style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold, fontFamily: 'Georgia'),
+                    ),
+                    const Spacer(),
+                    IconButton(
+                      icon: const Icon(Icons.close, size: 20),
+                      onPressed: () => Navigator.of(ctx).pop(),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Text(item.bookTitle, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 4),
+                Text('Tracking / Batch: ${item.trackingNumber} · Barcode: ${item.barcode}',
+                    style: const TextStyle(fontSize: 11, color: AppColors.textSecondary)),
+                const SizedBox(height: 14),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: AppColors.card,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: AppColors.cardBorder),
+                  ),
+                  child: Column(
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text('Drop-off Location:', style: TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+                          Text(fromBranch?.name ?? item.fromBranchId, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text('Home Destination:', style: TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+                          Text(toBranch?.name ?? item.toBranchId, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primary,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                    icon: const Icon(Icons.map_outlined, size: 18),
+                    label: const Text('View All Network Transit Items'),
+                    onPressed: () {
+                      Navigator.of(ctx).pop();
+                      onNavigateToTransit();
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final repo = LibraryRepository();
@@ -143,7 +478,7 @@ class DashboardScreen extends StatelessWidget {
                                 const Icon(Icons.location_on_outlined, size: 16, color: AppColors.primary),
                                 const SizedBox(width: 6),
                                 ConstrainedBox(
-                                  constraints: const BoxConstraints(maxWidth: 160),
+                                  constraints: const BoxConstraints(maxWidth: 150),
                                   child: Text(
                                     activeBranch?.name ?? 'Downtown Central...',
                                     maxLines: 1,
@@ -163,8 +498,16 @@ class DashboardScreen extends StatelessWidget {
                         ),
                         const Spacer(),
 
-                        // Notification Bell
+                        // Search Icon Button (routes to Catalog)
                         IconButton(
+                          tooltip: 'Search & Catalog',
+                          icon: const Icon(Icons.search_rounded, size: 22, color: AppColors.textPrimary),
+                          onPressed: onNavigateToCatalog,
+                        ),
+
+                        // Notification Bell (opens Notification Sheet)
+                        IconButton(
+                          tooltip: 'Network Notifications',
                           icon: Stack(
                             clipBehavior: Clip.none,
                             children: [
@@ -184,7 +527,7 @@ class DashboardScreen extends StatelessWidget {
                                 ),
                             ],
                           ),
-                          onPressed: onNavigateToTransit,
+                          onPressed: () => _showNotificationsSheet(context, repo),
                         ),
 
                         // Monogram Avatar Circle
@@ -628,7 +971,7 @@ class DashboardScreen extends StatelessWidget {
 
           const SizedBox(height: 12),
 
-          // Primary Dark Forest Green Action Button
+          // Primary Dark Forest Green Action Button (opens return options sheet)
           SizedBox(
             width: double.infinity,
             child: ElevatedButton.icon(
@@ -641,19 +984,7 @@ class DashboardScreen extends StatelessWidget {
                 ),
                 elevation: 0,
               ),
-              onPressed: () {
-                // Instantly populates return scanner or triggers drop-box return
-                final result = repo.processBookReturn(
-                  barcode: loan.barcode,
-                  returnBranchId: repo.activeBranchId,
-                  staffName: 'Self-Service Drop-Box (${repo.activeBranch?.name ?? "Branch"})',
-                );
-                if (result.success && result.loan != null) {
-                  ReturnReceiptScreen.show(context, result.loan!);
-                } else {
-                  onNavigateToScanner();
-                }
-              },
+              onPressed: () => _showReturnActionSheet(context, loan, repo),
               icon: const Icon(Icons.qr_code_scanner, size: 18),
               label: const Text(
                 'Return via Drop-Box Scanner',
@@ -671,104 +1002,107 @@ class DashboardScreen extends StatelessWidget {
   }
 
   // -------------------------------------------------------------
-  // Athenaeum "Network Transit & Clearances" Card
+  // Athenaeum "Network Transit & Clearances" Card (Tappable for details)
   // -------------------------------------------------------------
   Widget _buildAthenaeumTransitCard(BuildContext context, TransitItem item, LibraryRepository repo) {
     final fromBranch = repo.getBranchById(item.fromBranchId);
     final toBranch = repo.getBranchById(item.toBranchId);
 
-    return Container(
-      margin: const EdgeInsets.fromLTRB(16, 10, 16, 4),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppColors.card,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: AppColors.cardBorder),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Book Thumbnail
-          Container(
-            width: 50,
-            height: 64,
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: AppColors.cardBorder),
+    return GestureDetector(
+      onTap: () => _showTransitDetailsSheet(context, item, repo),
+      child: Container(
+        margin: const EdgeInsets.fromLTRB(16, 10, 16, 4),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: AppColors.card,
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: AppColors.cardBorder),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Book Thumbnail
+            Container(
+              width: 50,
+              height: 64,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: AppColors.cardBorder),
+              ),
+              child: const Center(
+                child: Icon(Icons.code_rounded, size: 22, color: AppColors.primary),
+              ),
             ),
-            child: const Center(
-              child: Icon(Icons.code_rounded, size: 22, color: AppColors.primary),
-            ),
-          ),
-          const SizedBox(width: 14),
+            const SizedBox(width: 14),
 
-          // Details
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  item.bookTitle,
-                  style: const TextStyle(
-                    fontSize: 14.5,
-                    fontWeight: FontWeight.bold,
-                    fontFamily: 'Georgia',
-                    color: AppColors.textPrimary,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  'Barcode: ${item.barcode}',
-                  style: const TextStyle(fontSize: 11, color: AppColors.textSecondary),
-                ),
-                const SizedBox(height: 8),
-
-                // Syncing / Stage Pill
-                Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFFEF3C7),
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Container(
-                            width: 6,
-                            height: 6,
-                            decoration: const BoxDecoration(
-                              color: Color(0xFFD97706),
-                              shape: BoxShape.circle,
-                            ),
-                          ),
-                          const SizedBox(width: 5),
-                          Text(
-                            item.stage == TransitStage.awaitingDispatch
-                                ? 'SYNCING / STAGED'
-                                : (item.stage == TransitStage.inTransit ? 'IN TRANSIT' : 'RESTOCKED'),
-                            style: const TextStyle(
-                              fontSize: 10,
-                              fontWeight: FontWeight.bold,
-                              color: Color(0xFF92400E),
-                            ),
-                          ),
-                        ],
-                      ),
+            // Details
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    item.bookTitle,
+                    style: const TextStyle(
+                      fontSize: 14.5,
+                      fontWeight: FontWeight.bold,
+                      fontFamily: 'Georgia',
+                      color: AppColors.textPrimary,
                     ),
-                  ],
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  'Accepted at ${fromBranch?.name ?? item.fromBranchId} • En route to ${toBranch?.name ?? item.toBranchId}',
-                  style: const TextStyle(fontSize: 11, color: AppColors.textSecondary),
-                ),
-              ],
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    'Barcode: ${item.barcode}',
+                    style: const TextStyle(fontSize: 11, color: AppColors.textSecondary),
+                  ),
+                  const SizedBox(height: 8),
+
+                  // Syncing / Stage Pill
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFEF3C7),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Container(
+                              width: 6,
+                              height: 6,
+                              decoration: const BoxDecoration(
+                                color: Color(0xFFD97706),
+                                shape: BoxShape.circle,
+                              ),
+                            ),
+                            const SizedBox(width: 5),
+                            Text(
+                              item.stage == TransitStage.awaitingDispatch
+                                  ? 'SYNCING / STAGED'
+                                  : (item.stage == TransitStage.inTransit ? 'IN TRANSIT' : 'RESTOCKED'),
+                              style: const TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                                color: Color(0xFF92400E),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Accepted at ${fromBranch?.name ?? item.fromBranchId} • En route to ${toBranch?.name ?? item.toBranchId}',
+                    style: const TextStyle(fontSize: 11, color: AppColors.textSecondary),
+                  ),
+                ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

@@ -23,6 +23,8 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
   @override
   void initState() {
     super.initState();
+    final email = _auth.currentUser?.email ?? '';
+    _lastSentOtp = _auth.getLatestOtpForEmail(email) ?? '123456';
     _startCooldown();
   }
 
@@ -182,11 +184,24 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
                       Expanded(
                         child: Text(
                           _lastSentOtp != null
-                              ? 'Your OTP is: $_lastSentOtp'
+                              ? 'Your Verification OTP is: $_lastSentOtp'
                               : 'Enter the 6-digit OTP code sent, or use master OTP 123456.',
                           style: const TextStyle(fontSize: 12, color: AppColors.primary, fontWeight: FontWeight.w600),
                         ),
                       ),
+                      if (_lastSentOtp != null)
+                        TextButton(
+                          style: TextButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            minimumSize: Size.zero,
+                          ),
+                          onPressed: () {
+                            setState(() {
+                              _otpController.text = _lastSentOtp!;
+                            });
+                          },
+                          child: const Text('Auto-Fill', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.primary)),
+                        ),
                     ],
                   ),
                 ),

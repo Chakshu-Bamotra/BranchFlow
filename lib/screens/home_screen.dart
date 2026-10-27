@@ -30,6 +30,7 @@ class _HomeScreenState extends State<HomeScreen> {
       DashboardScreen(
         onNavigateToScanner: () => _onTabTapped(2),
         onNavigateToTransit: () => _onTabTapped(3),
+        onNavigateToCatalog: () => _onTabTapped(1),
       ),
       CatalogScreen(
         onNavigateToScanner: () => _onTabTapped(2),

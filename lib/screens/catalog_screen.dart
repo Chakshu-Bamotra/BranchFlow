@@ -202,7 +202,7 @@ class _CatalogScreenState extends State<CatalogScreen> {
               // Filter Chips Row
               SingleChildScrollView(
                 scrollDirection: Axis.horizontal,
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 6),
                 child: Row(
                   children: [
                     _filterChip('all', 'All Locations', _selectedBranchFilter, (v) {
@@ -211,6 +211,31 @@ class _CatalogScreenState extends State<CatalogScreen> {
                     ...repo.branches.map((b) => _filterChip(b.id, b.name, _selectedBranchFilter, (v) {
                           setState(() => _selectedBranchFilter = v);
                         })),
+                  ],
+                ),
+              ),
+
+              // Status Filter Chips Row
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                child: Row(
+                  children: [
+                    _filterChip('all', 'All Statuses', _selectedStatusFilter, (v) {
+                      setState(() => _selectedStatusFilter = v);
+                    }),
+                    _filterChip('available', 'Available', _selectedStatusFilter, (v) {
+                      setState(() => _selectedStatusFilter = v);
+                    }),
+                    _filterChip('borrowed', 'Borrowed', _selectedStatusFilter, (v) {
+                      setState(() => _selectedStatusFilter = v);
+                    }),
+                    _filterChip('inTransit', 'In Transit', _selectedStatusFilter, (v) {
+                      setState(() => _selectedStatusFilter = v);
+                    }),
+                    _filterChip('inHolding', 'In Holding', _selectedStatusFilter, (v) {
+                      setState(() => _selectedStatusFilter = v);
+                    }),
                   ],
                 ),
               ),
