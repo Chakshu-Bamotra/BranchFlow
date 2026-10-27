@@ -32,14 +32,19 @@ class _CatalogScreenState extends State<CatalogScreen> {
       context: context,
       builder: (ctx) {
         return AlertDialog(
-          title: const Text('Borrow Book'),
+          backgroundColor: AppColors.background,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+          title: const Text(
+            'Borrow Book',
+            style: TextStyle(fontFamily: 'Georgia', fontWeight: FontWeight.bold),
+          ),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
                 book.title,
-                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, fontFamily: 'Georgia'),
               ),
               const SizedBox(height: 4),
               Text('Author: ${book.author}', style: const TextStyle(fontSize: 13, color: AppColors.textSecondary)),
@@ -72,21 +77,22 @@ class _CatalogScreenState extends State<CatalogScreen> {
                   Text('14 Days', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
                 ],
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 14),
               Container(
-                padding: const EdgeInsets.all(10),
+                padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
                   color: AppColors.accentSoft,
-                  borderRadius: BorderRadius.circular(8),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: const Color(0xFFD4E8DA)),
                 ),
                 child: const Row(
                   children: [
-                    Icon(Icons.info_outline, size: 16, color: AppColors.accent),
+                    Icon(Icons.verified_outlined, size: 18, color: AppColors.primary),
                     SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        'You can return this book to ANY branch in the network anytime!',
-                        style: TextStyle(fontSize: 11, color: AppColors.accent, fontWeight: FontWeight.w600),
+                        'Instant clearance guaranteed when returned to ANY branch in the network.',
+                        style: TextStyle(fontSize: 11, color: AppColors.primary, fontWeight: FontWeight.w600),
                       ),
                     ),
                   ],
@@ -97,9 +103,10 @@ class _CatalogScreenState extends State<CatalogScreen> {
           actions: [
             TextButton(
               onPressed: () => Navigator.of(ctx).pop(),
-              child: const Text('Cancel'),
+              child: const Text('Cancel', style: TextStyle(color: AppColors.textSecondary)),
             ),
             ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary),
               onPressed: () {
                 final success = repo.borrowBook(
                   bookId: book.id,
@@ -108,15 +115,13 @@ class _CatalogScreenState extends State<CatalogScreen> {
                   fromBranchId: book.currentBranchId,
                 );
                 Navigator.of(ctx).pop();
-                if (success) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('Successfully borrowed "${book.title}". Enjoy reading!'),
-                      backgroundColor: AppColors.success,
-                      behavior: SnackBarBehavior.floating,
-                    ),
-                  );
-                }
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(success ? 'Successfully checked out "${book.title}"!' : 'Could not check out this book.'),
+                    backgroundColor: success ? AppColors.success : AppColors.danger,
+                    behavior: SnackBarBehavior.floating,
+                  ),
+                );
               },
               child: const Text('Confirm Checkout'),
             ),
@@ -133,152 +138,110 @@ class _CatalogScreenState extends State<CatalogScreen> {
     return ListenableBuilder(
       listenable: repo,
       builder: (context, _) {
-        final query = _searchController.text.toLowerCase().trim();
-
+        final query = _searchController.text.trim().toLowerCase();
         final filteredBooks = repo.books.where((b) {
-          // Branch filter
-          if (_selectedBranchFilter != 'all') {
-            if (b.homeBranchId != _selectedBranchFilter &&
-                b.currentBranchId != _selectedBranchFilter) {
-              return false;
-            }
-          }
+          final matchesQuery = query.isEmpty ||
+              b.title.toLowerCase().contains(query) ||
+              b.author.toLowerCase().contains(query) ||
+              b.barcode.toLowerCase().contains(query) ||
+              b.isbn.toLowerCase().contains(query);
 
-          // Status filter
-          if (_selectedStatusFilter != 'all') {
-            if (b.status.key != _selectedStatusFilter) return false;
-          }
+          final matchesBranch = _selectedBranchFilter == 'all' ||
+              b.currentBranchId == _selectedBranchFilter ||
+              b.homeBranchId == _selectedBranchFilter;
 
-          // Search query
-          if (query.isNotEmpty) {
-            final matchTitle = b.title.toLowerCase().contains(query);
-            final matchAuthor = b.author.toLowerCase().contains(query);
-            final matchBarcode = b.barcode.toLowerCase().contains(query);
-            final matchIsbn = b.isbn.toLowerCase().contains(query);
-            final matchCategory = b.category.toLowerCase().contains(query);
-            return matchTitle || matchAuthor || matchBarcode || matchIsbn || matchCategory;
-          }
+          final matchesStatus = _selectedStatusFilter == 'all' ||
+              b.status.name == _selectedStatusFilter;
 
-          return true;
+          return matchesQuery && matchesBranch && matchesStatus;
         }).toList();
 
         return Scaffold(
+          backgroundColor: AppColors.background,
           appBar: AppBar(
-            title: const Text('Network Catalog'),
+            title: const Text('Search & Catalog'),
+            bottom: PreferredSize(
+              preferredSize: const Size.fromHeight(60),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                child: TextField(
+                  controller: _searchController,
+                  onChanged: (_) => setState(() {}),
+                  decoration: InputDecoration(
+                    hintText: 'Search by title, author, barcode or ISBN...',
+                    hintStyle: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
+                    prefixIcon: const Icon(Icons.search, color: AppColors.primary),
+                    suffixIcon: _searchController.text.isNotEmpty
+                        ? IconButton(
+                            icon: const Icon(Icons.clear, size: 18),
+                            onPressed: () {
+                              _searchController.clear();
+                              setState(() {});
+                            },
+                          )
+                        : null,
+                    filled: true,
+                    fillColor: AppColors.card,
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(14),
+                      borderSide: const BorderSide(color: AppColors.cardBorder),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(14),
+                      borderSide: const BorderSide(color: AppColors.cardBorder),
+                    ),
+                  ),
+                ),
+              ),
+            ),
           ),
           body: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Search & Filter Header
-              Container(
-                color: AppColors.surface,
+              // Filter Chips Row
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
                 padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
-                child: Column(
-                  children: [
-                    TextField(
-                      controller: _searchController,
-                      decoration: InputDecoration(
-                        hintText: 'Search by title, author, barcode...',
-                        prefixIcon: const Icon(Icons.search, color: AppColors.textSecondary),
-                        suffixIcon: _searchController.text.isNotEmpty
-                            ? IconButton(
-                                icon: const Icon(Icons.clear, size: 18),
-                                onPressed: () {
-                                  _searchController.clear();
-                                  setState(() {});
-                                },
-                              )
-                            : null,
-                      ),
-                      onChanged: (_) => setState(() {}),
-                    ),
-                    const SizedBox(height: 10),
-                    // Branch horizontal selector
-                    SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      child: Row(
-                        children: [
-                          _filterChip('all', 'All Branches', _selectedBranchFilter, (val) {
-                            setState(() => _selectedBranchFilter = val);
-                          }),
-                          ...repo.branches.map((br) {
-                            return _filterChip(br.id, br.name, _selectedBranchFilter, (val) {
-                              setState(() => _selectedBranchFilter = val);
-                            });
-                          }),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    // Status horizontal selector
-                    SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      child: Row(
-                        children: [
-                          _filterChip('all', 'All Statuses', _selectedStatusFilter, (val) {
-                            setState(() => _selectedStatusFilter = val);
-                          }),
-                          _filterChip('available', 'Available', _selectedStatusFilter, (val) {
-                            setState(() => _selectedStatusFilter = val);
-                          }),
-                          _filterChip('borrowed', 'Checked Out', _selectedStatusFilter, (val) {
-                            setState(() => _selectedStatusFilter = val);
-                          }),
-                          _filterChip('in_holding', 'Holding Staging', _selectedStatusFilter, (val) {
-                            setState(() => _selectedStatusFilter = val);
-                          }),
-                          _filterChip('in_transit', 'In Transit', _selectedStatusFilter, (val) {
-                            setState(() => _selectedStatusFilter = val);
-                          }),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-
-              const Divider(height: 1, color: AppColors.border),
-
-              // Results Count Bar
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                 child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text(
-                      '${filteredBooks.length} books found',
-                      style: const TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.textSecondary,
-                      ),
-                    ),
-                    Text(
-                      'Unified Cross-Catalog',
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: AppColors.primaryLight,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
+                    _filterChip('all', 'All Locations', _selectedBranchFilter, (v) {
+                      setState(() => _selectedBranchFilter = v);
+                    }),
+                    ...repo.branches.map((b) => _filterChip(b.id, b.name, _selectedBranchFilter, (v) {
+                          setState(() => _selectedBranchFilter = v);
+                        })),
                   ],
                 ),
               ),
 
-              // Book List
+              // Results Count
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                child: Text(
+                  '${filteredBooks.length} items found across community network',
+                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textSecondary),
+                ),
+              ),
+              const SizedBox(height: 6),
+
+              // Books List
               Expanded(
                 child: filteredBooks.isEmpty
-                    ? EmptyStateCard(
-                        title: 'No books match your criteria',
-                        message: 'Try searching with a different title, ISBN, or reset branch filters.',
-                        icon: Icons.search_off_rounded,
-                        actionLabel: 'Reset filters',
-                        onAction: () {
-                          setState(() {
-                            _searchController.clear();
-                            _selectedBranchFilter = 'all';
-                            _selectedStatusFilter = 'all';
-                          });
-                        },
+                    ? Center(
+                        child: EmptyStateCard(
+                          title: 'No Matching Books',
+                          message: 'Try adjusting your search query or location filter.',
+                          icon: Icons.search_off_rounded,
+                          actionLabel: 'Reset Filters',
+                          onAction: () {
+                            setState(() {
+                              _searchController.clear();
+                              _selectedBranchFilter = 'all';
+                              _selectedStatusFilter = 'all';
+                            });
+                          },
+                        ),
                       )
                     : ListView.builder(
                         padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
@@ -288,138 +251,153 @@ class _CatalogScreenState extends State<CatalogScreen> {
                           final homeBranch = repo.getBranchById(book.homeBranchId);
                           final currentBranch = repo.getBranchById(book.currentBranchId);
 
-                          return Card(
+                          return Container(
                             margin: const EdgeInsets.only(bottom: 12),
-                            child: Padding(
-                              padding: const EdgeInsets.all(14),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Row(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Container(
-                                        width: 44,
-                                        height: 58,
-                                        decoration: BoxDecoration(
-                                          color: AppColors.primary.withValues(alpha: 0.08),
-                                          borderRadius: BorderRadius.circular(8),
-                                          border: Border.all(color: AppColors.border),
-                                        ),
-                                        child: const Center(
-                                          child: Icon(Icons.book, color: AppColors.primary, size: 24),
-                                        ),
-                                      ),
-                                      const SizedBox(width: 12),
-                                      Expanded(
-                                        child: Column(
-                                          crossAxisAlignment: CrossAxisAlignment.start,
-                                          children: [
-                                            Text(
-                                              book.title,
-                                              style: const TextStyle(
-                                                fontSize: 14,
-                                                fontWeight: FontWeight.bold,
-                                                color: AppColors.textPrimary,
-                                              ),
-                                            ),
-                                            const SizedBox(height: 2),
-                                            Text(
-                                              '${book.author} · ${book.publishedYear}',
-                                              style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
-                                            ),
-                                            const SizedBox(height: 4),
-                                            Text(
-                                              'Barcode: ${book.barcode} · ISBN: ${book.isbn}',
-                                              style: const TextStyle(
-                                                fontSize: 11,
-                                                fontFamily: 'monospace',
-                                                color: AppColors.textMuted,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-
-                                  const SizedBox(height: 12),
-                                  const Divider(height: 1, color: AppColors.border),
-                                  const SizedBox(height: 10),
-
-                                  // Locations & Status
-                                  Row(
-                                    children: [
-                                      Expanded(
-                                        child: Wrap(
-                                          spacing: 6,
-                                          runSpacing: 6,
-                                          children: [
-                                            BranchChip(
-                                              branchName: homeBranch?.name ?? 'Home Branch',
-                                              branchCode: homeBranch?.code,
-                                              isHome: true,
-                                            ),
-                                            if (!book.isAtHomeBranch)
-                                              BranchChip(
-                                                branchName: currentBranch?.name ?? 'Current Location',
-                                                branchCode: currentBranch?.code,
-                                                isCurrent: true,
-                                              ),
-                                          ],
-                                        ),
-                                      ),
-                                      _buildStatusBadge(book.status),
-                                    ],
-                                  ),
-
-                                  const SizedBox(height: 12),
-
-                                  // Action Bar
-                                  if (book.status == BookStatus.available)
-                                    SizedBox(
-                                      width: double.infinity,
-                                      child: ElevatedButton.icon(
-                                        icon: const Icon(Icons.bookmark_add_outlined, size: 16),
-                                        label: const Text('Borrow Book'),
-                                        onPressed: () => _showBorrowDialog(context, book),
-                                      ),
-                                    )
-                                  else if (book.status == BookStatus.borrowed)
-                                    SizedBox(
-                                      width: double.infinity,
-                                      child: OutlinedButton.icon(
-                                        icon: const Icon(Icons.qr_code_scanner, size: 16),
-                                        label: const Text('Return via Scanner Desk'),
-                                        onPressed: widget.onNavigateToScanner,
-                                      ),
-                                    )
-                                  else if (book.status == BookStatus.inHolding)
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: AppColors.card,
+                              borderRadius: BorderRadius.circular(18),
+                              border: Border.all(color: AppColors.cardBorder),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    // Book Thumbnail Container
                                     Container(
-                                      padding: const EdgeInsets.all(8),
+                                      width: 48,
+                                      height: 64,
                                       decoration: BoxDecoration(
-                                        color: AppColors.warningLight,
-                                        borderRadius: BorderRadius.circular(8),
+                                        color: AppColors.primary.withValues(alpha: 0.1),
+                                        borderRadius: BorderRadius.circular(10),
+                                        border: Border.all(color: AppColors.cardBorder),
                                       ),
-                                      child: const Row(
+                                      child: const Center(
+                                        child: Icon(Icons.menu_book_rounded, color: AppColors.primary, size: 22),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 14),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
                                         children: [
-                                          Icon(Icons.inventory_2_outlined, size: 16, color: AppColors.warning),
-                                          SizedBox(width: 6),
-                                          Expanded(
-                                            child: Text(
-                                              'Returned cross-branch. Staged for courier to home branch.',
-                                              style: TextStyle(
-                                                fontSize: 11,
-                                                color: AppColors.warning,
-                                                fontWeight: FontWeight.w600,
-                                              ),
+                                          Text(
+                                            book.title,
+                                            style: const TextStyle(
+                                              fontSize: 15,
+                                              fontWeight: FontWeight.bold,
+                                              fontFamily: 'Georgia',
+                                              color: AppColors.textPrimary,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 2),
+                                          Text(
+                                            '${book.author} · ${book.publishedYear}',
+                                            style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                                          ),
+                                          const SizedBox(height: 4),
+                                          Text(
+                                            'Barcode: ${book.barcode}',
+                                            style: const TextStyle(
+                                              fontSize: 11,
+                                              fontFamily: 'monospace',
+                                              color: AppColors.textMuted,
                                             ),
                                           ),
                                         ],
                                       ),
                                     ),
-                                ],
-                              ),
+                                    _buildStatusBadge(book.status),
+                                  ],
+                                ),
+
+                                const SizedBox(height: 12),
+                                const Divider(height: 1, color: AppColors.border),
+                                const SizedBox(height: 10),
+
+                                // Locations
+                                Wrap(
+                                  spacing: 6,
+                                  runSpacing: 6,
+                                  children: [
+                                    BranchChip(
+                                      branchName: homeBranch?.name ?? 'Home Branch',
+                                      branchCode: homeBranch?.code,
+                                      isHome: true,
+                                    ),
+                                    if (!book.isAtHomeBranch)
+                                      BranchChip(
+                                        branchName: currentBranch?.name ?? 'Current Location',
+                                        branchCode: currentBranch?.code,
+                                        isCurrent: true,
+                                      ),
+                                  ],
+                                ),
+
+                                const SizedBox(height: 12),
+
+                                // Action Bar
+                                if (book.status == BookStatus.available)
+                                  SizedBox(
+                                    width: double.infinity,
+                                    child: ElevatedButton.icon(
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: AppColors.primary,
+                                        foregroundColor: Colors.white,
+                                        padding: const EdgeInsets.symmetric(vertical: 12),
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius: BorderRadius.circular(12),
+                                        ),
+                                      ),
+                                      icon: const Icon(Icons.bookmark_add_outlined, size: 16),
+                                      label: const Text('Borrow Book'),
+                                      onPressed: () => _showBorrowDialog(context, book),
+                                    ),
+                                  )
+                                else if (book.status == BookStatus.borrowed)
+                                  SizedBox(
+                                    width: double.infinity,
+                                    child: OutlinedButton.icon(
+                                      style: OutlinedButton.styleFrom(
+                                        foregroundColor: AppColors.primary,
+                                        side: const BorderSide(color: AppColors.primary),
+                                        padding: const EdgeInsets.symmetric(vertical: 12),
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius: BorderRadius.circular(12),
+                                        ),
+                                      ),
+                                      icon: const Icon(Icons.qr_code_scanner, size: 16),
+                                      label: const Text('Return via Drop-Box Scanner'),
+                                      onPressed: widget.onNavigateToScanner,
+                                    ),
+                                  )
+                                else if (book.status == BookStatus.inHolding)
+                                  Container(
+                                    padding: const EdgeInsets.all(10),
+                                    decoration: BoxDecoration(
+                                      color: AppColors.warningLight,
+                                      borderRadius: BorderRadius.circular(10),
+                                    ),
+                                    child: const Row(
+                                      children: [
+                                        Icon(Icons.inventory_2_outlined, size: 16, color: AppColors.warning),
+                                        SizedBox(width: 8),
+                                        Expanded(
+                                          child: Text(
+                                            'Returned cross-branch. Staged for courier to home branch.',
+                                            style: TextStyle(
+                                              fontSize: 11,
+                                              color: AppColors.warning,
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                              ],
                             ),
                           );
                         },
@@ -446,14 +424,18 @@ class _CatalogScreenState extends State<CatalogScreen> {
         selected: isSelected,
         labelStyle: TextStyle(
           fontSize: 11,
-          fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-          color: isSelected ? Colors.white : AppColors.textSecondary,
+          fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
+          color: isSelected ? Colors.white : AppColors.textPrimary,
         ),
-        backgroundColor: AppColors.surface,
+        backgroundColor: AppColors.card,
         selectedColor: AppColors.primary,
         checkmarkColor: Colors.white,
-        side: BorderSide(color: isSelected ? AppColors.primary : AppColors.border),
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+          side: BorderSide(
+            color: isSelected ? AppColors.primary : AppColors.cardBorder,
+          ),
+        ),
         onSelected: (_) => onSelected(key),
       ),
     );
@@ -462,13 +444,29 @@ class _CatalogScreenState extends State<CatalogScreen> {
   Widget _buildStatusBadge(BookStatus status) {
     switch (status) {
       case BookStatus.available:
-        return StatusBadge.success('Available');
+        return const StatusBadge(
+          label: 'Available',
+          textColor: AppColors.success,
+          backgroundColor: AppColors.successLight,
+        );
       case BookStatus.borrowed:
-        return StatusBadge.danger('Checked Out');
-      case BookStatus.inHolding:
-        return StatusBadge.warning('Staging');
+        return const StatusBadge(
+          label: 'Borrowed',
+          textColor: AppColors.warning,
+          backgroundColor: AppColors.warningLight,
+        );
       case BookStatus.inTransit:
-        return StatusBadge.info('In Transit');
+        return const StatusBadge(
+          label: 'In Transit',
+          textColor: AppColors.info,
+          backgroundColor: AppColors.infoLight,
+        );
+      case BookStatus.inHolding:
+        return const StatusBadge(
+          label: 'In Holding',
+          textColor: AppColors.accent,
+          backgroundColor: AppColors.accentSoft,
+        );
     }
   }
 }

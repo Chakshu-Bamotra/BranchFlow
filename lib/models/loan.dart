@@ -87,6 +87,13 @@ class Loan {
     return DateTime.now().isAfter(dueDate);
   }
 
+  bool get isOverdue => isCurrentlyOverdue;
+  int get dueDaysRemaining => dueDate.difference(DateTime.now()).inDays;
+  String get barcode => bookBarcode;
+  String get borrowBranchId => borrowedFromBranchId;
+  String? get returnBranchId => returnedToBranchId;
+  DateTime? get returnedDate => returnedAt;
+
   Loan copyWith({
     String? id,
     String? bookId,

@@ -66,6 +66,11 @@ class TransitItem {
     required this.courierBatchId,
   });
 
+  String get fromBranchId => originBranchId;
+  String get toBranchId => destinationBranchId;
+  String get trackingNumber => courierBatchId;
+  String get barcode => bookBarcode;
+
   TransitItem copyWith({
     String? id,
     String? bookId,

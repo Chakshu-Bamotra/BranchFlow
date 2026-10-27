@@ -120,9 +120,9 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
             constraints: const BoxConstraints(maxWidth: 460),
             padding: const EdgeInsets.all(32),
             decoration: BoxDecoration(
-              color: AppColors.surface,
+              color: AppColors.card,
               borderRadius: BorderRadius.circular(24),
-              border: Border.all(color: AppColors.border),
+              border: Border.all(color: AppColors.cardBorder),
               boxShadow: [
                 BoxShadow(
                   color: Colors.black.withValues(alpha: 0.04),
@@ -171,9 +171,9 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: const Color(0xFFEEF2FF),
+                    color: AppColors.accentSoft,
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: const Color(0xFFC7D2FE)),
+                    border: Border.all(color: const Color(0xFFD4E8DA)),
                   ),
                   child: Row(
                     children: [

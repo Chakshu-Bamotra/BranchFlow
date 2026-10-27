@@ -60,8 +60,9 @@ class _SplashScreenState extends State<SplashScreen> {
             const Text(
               'BranchFlow',
               style: TextStyle(
-                fontSize: 32,
+                fontSize: 34,
                 fontWeight: FontWeight.bold,
+                fontFamily: 'Georgia',
                 color: Colors.white,
                 letterSpacing: -0.5,
               ),
@@ -73,7 +74,7 @@ class _SplashScreenState extends State<SplashScreen> {
               'Cross-Branch Library Network',
               style: TextStyle(
                 fontSize: 14,
-                color: Color(0xFF94A3B8),
+                color: Color(0xFFC7D7CD),
                 letterSpacing: 0.5,
               ),
             ),

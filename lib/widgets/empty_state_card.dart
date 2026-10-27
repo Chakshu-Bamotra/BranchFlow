@@ -28,11 +28,12 @@ class EmptyStateCard extends StatelessWidget {
           children: [
             Container(
               padding: const EdgeInsets.all(18),
-              decoration: const BoxDecoration(
-                color: Color(0xFFF1F5F9),
+              decoration: BoxDecoration(
+                color: AppColors.card,
                 shape: BoxShape.circle,
+                border: Border.all(color: AppColors.cardBorder),
               ),
-              child: Icon(icon, size: 44, color: AppColors.textMuted),
+              child: Icon(icon, size: 44, color: AppColors.primary),
             ),
             const SizedBox(height: 16),
             Text(

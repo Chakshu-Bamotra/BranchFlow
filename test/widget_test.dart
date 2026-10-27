@@ -23,10 +23,10 @@ void main() {
     await signInFuture;
     await tester.pumpAndSettle();
 
-    // 5. Verify main dashboard renders
+    // 5. Verify main Athenaeum dashboard renders
     expect(find.text('Instant Cross-Branch Clearance'), findsOneWidget);
-    expect(find.text('Dashboard'), findsOneWidget);
+    expect(find.text('Shelf'), findsOneWidget);
     expect(find.text('Return Desk'), findsOneWidget);
-    expect(find.text('Transit Hub'), findsWidgets);
+    expect(find.text('Network Map'), findsWidgets);
   });
 }

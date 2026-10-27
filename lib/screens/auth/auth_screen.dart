@@ -183,9 +183,9 @@ class _AuthScreenState extends State<AuthScreen> {
                       Container(
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
-                          color: const Color(0xFFEEF2FF),
+                          color: AppColors.accentSoft,
                           borderRadius: BorderRadius.circular(10),
-                          border: Border.all(color: const Color(0xFFC7D2FE)),
+                          border: Border.all(color: const Color(0xFFD4E8DA)),
                         ),
                         child: Text(
                           testOtp != null
