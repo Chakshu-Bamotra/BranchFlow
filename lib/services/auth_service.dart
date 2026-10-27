@@ -49,7 +49,13 @@ class AuthService extends ChangeNotifier {
     isEmailVerified: true,
   );
 
-  bool _isFirebaseAvailable = false;
+  bool get _isFirebaseAvailable {
+    try {
+      return Firebase.apps.isNotEmpty;
+    } catch (_) {
+      return false;
+    }
+  }
   final _authStreamController = StreamController<UserModel?>.broadcast();
 
   UserModel? get currentUser => _currentUser;
@@ -90,12 +96,8 @@ class AuthService extends ChangeNotifier {
     }
   }
 
-  void checkFirebaseStatus() {
-    try {
-      _isFirebaseAvailable = Firebase.apps.isNotEmpty;
-    } catch (_) {
-      _isFirebaseAvailable = false;
-    }
+  bool checkFirebaseStatus() {
+    return _isFirebaseAvailable;
   }
 
   // -------------------------------------------------------------

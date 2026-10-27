@@ -4,6 +4,7 @@ import '../models/book.dart';
 import '../models/loan.dart';
 import '../models/transit_item.dart';
 import 'mock_data.dart';
+import 'firestore_service.dart';
 
 enum UserRole {
   member,
@@ -227,6 +228,17 @@ class LibraryRepository extends ChangeNotifier {
       );
     }
 
+    // Sync to Cloud Firestore if connected
+    if (FirestoreService().isConnected) {
+      FirestoreService().executeCrossBranchReturnBatch(
+        loan: updatedLoan,
+        book: book,
+        returnBranchId: returnBranchId,
+        staffName: staff,
+        receiptCode: updatedLoan.returnReceiptCode ?? 'REC-AUTO',
+      );
+    }
+
     notifyListeners();
 
     return ReturnResult(
@@ -256,6 +268,17 @@ class LibraryRepository extends ChangeNotifier {
       if (bookIdx != -1) {
         _books[bookIdx] = _books[bookIdx].copyWith(status: BookStatus.inTransit);
       }
+
+      if (FirestoreService().isConnected) {
+        FirestoreService().transitRef?.doc(transitId).update({
+          'stage': TransitStage.inTransit.key,
+          'dispatchedAt': DateTime.now(),
+        });
+        if (bookIdx != -1) {
+          FirestoreService().updateBookStatus(current.bookId, BookStatus.inTransit);
+        }
+      }
+
       notifyListeners();
     }
   }
@@ -276,6 +299,21 @@ class LibraryRepository extends ChangeNotifier {
           status: BookStatus.available,
         );
       }
+
+      if (FirestoreService().isConnected) {
+        FirestoreService().transitRef?.doc(transitId).update({
+          'stage': TransitStage.restocked.key,
+          'restockedAt': DateTime.now(),
+        });
+        if (bookIdx != -1) {
+          FirestoreService().updateBookStatus(
+            current.bookId,
+            BookStatus.available,
+            currentBranchId: current.destinationBranchId,
+          );
+        }
+      }
+
       notifyListeners();
     }
   }
@@ -311,6 +349,12 @@ class LibraryRepository extends ChangeNotifier {
 
     _loans.insert(0, newLoan);
     _books[bookIdx] = book.copyWith(status: BookStatus.borrowed);
+
+    if (FirestoreService().isConnected) {
+      FirestoreService().loansRef?.doc(newLoan.id).set(newLoan);
+      FirestoreService().updateBookStatus(book.id, BookStatus.borrowed);
+    }
+
     notifyListeners();
     return true;
   }
