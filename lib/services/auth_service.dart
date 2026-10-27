@@ -3,6 +3,8 @@ import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:cloud_functions/cloud_functions.dart';
+import '../core/config/env.dart';
 
 class UserModel {
   final String uid;
@@ -45,8 +47,9 @@ class AuthService extends ChangeNotifier {
   // Start as null so user must actually enter credentials on startup!
   UserModel? _currentUser;
 
-  // In-memory OTP storage: email -> 6-digit OTP
-  final Map<String, String> _otpCache = {};
+  // Offline-mode only (no Firebase): email -> 6-digit OTP.
+  // With Firebase, codes are generated, emailed and verified by Cloud Functions.
+  final Map<String, String> _localOtpCache = {};
 
   bool get _isFirebaseAvailable {
     try {
@@ -96,20 +99,31 @@ class AuthService extends ChangeNotifier {
     }
   }
 
+  static String mapFunctionsException(FirebaseFunctionsException e) {
+    final message = e.message;
+    // Undeployed or unreachable functions surface bare codes like "internal" / "NOT_FOUND".
+    if (message == null || message.isEmpty || message.toLowerCase().replaceAll('_', '-') == e.code) {
+      return 'The verification service is unavailable right now. Please try again later.';
+    }
+    return message;
+  }
+
   bool checkFirebaseStatus() {
     return _isFirebaseAvailable;
   }
 
-  String _generateOtp(String email) {
+  String _generateLocalOtp(String email) {
     final cleanEmail = email.trim().toLowerCase();
-    final otp = (100000 + Random().nextInt(900000)).toString();
-    _otpCache[cleanEmail] = otp;
-    debugPrint('*** OTP FOR $cleanEmail: $otp ***');
+    final otp = (100000 + Random.secure().nextInt(900000)).toString();
+    _localOtpCache[cleanEmail] = otp;
+    debugPrint('*** [offline mode] OTP FOR $cleanEmail: $otp ***');
     return otp;
   }
 
-  String? getLatestOtpForEmail(String email) {
-    return _otpCache[email.trim().toLowerCase()];
+  // Built-in demo accounts use non-deliverable addresses, so they skip email verification.
+  static bool _isDemoAccount(String email) {
+    final clean = email.trim().toLowerCase();
+    return clean == Env.defaultLibrarianEmail || clean == Env.defaultMemberEmail;
   }
 
   // -------------------------------------------------------------
@@ -137,7 +151,7 @@ class AuthService extends ChangeNotifier {
             email: fbUser?.email ?? cleanEmail,
             displayName: fbUser?.displayName ?? cleanEmail.split('@').first,
             role: cleanEmail.contains('staff') || cleanEmail.contains('admin') ? 'librarian' : 'member',
-            isEmailVerified: fbUser?.emailVerified ?? true,
+            isEmailVerified: fbUser?.emailVerified == true || _isDemoAccount(cleanEmail),
           );
         } on FirebaseAuthException catch (e) {
           // If demo user does not exist in Firebase Auth yet, auto-provision it
@@ -214,8 +228,6 @@ class AuthService extends ChangeNotifier {
     }
 
     try {
-      final otp = _generateOtp(cleanEmail);
-
       if (_isFirebaseAvailable) {
         final credential = await FirebaseAuth.instance.createUserWithEmailAndPassword(
           email: cleanEmail,
@@ -231,26 +243,38 @@ class AuthService extends ChangeNotifier {
           role: role,
           isEmailVerified: false,
         );
-      } else {
-        await Future.delayed(const Duration(milliseconds: 500));
-        _currentUser = UserModel(
-          uid: 'UID-${cleanEmail.hashCode.abs()}',
-          email: cleanEmail,
-          displayName: fullName,
-          role: role,
-          isEmailVerified: false,
+        _notifyStateChange();
+
+        // Account exists now; email the verification code.
+        final otpRes = await sendEmailVerificationOtp(cleanEmail);
+        return AuthResult(
+          success: true,
+          message: otpRes.success
+              ? 'Account created! We emailed a 6-digit verification code to $cleanEmail.'
+              : 'Account created, but we could not send the code: ${otpRes.message}',
+          requiresVerification: true,
         );
       }
+
+      await Future.delayed(const Duration(milliseconds: 500));
+      _currentUser = UserModel(
+        uid: 'UID-${cleanEmail.hashCode.abs()}',
+        email: cleanEmail,
+        displayName: fullName,
+        role: role,
+        isEmailVerified: false,
+      );
       _notifyStateChange();
+      final otp = _generateLocalOtp(cleanEmail);
 
       return AuthResult(
         success: true,
-        message: 'Account created! Your 6-digit OTP verification code is: $otp',
+        message: 'Account created! (Offline mode: the OTP is printed to the debug console.)',
         requiresVerification: true,
         otpCode: otp,
       );
     } on FirebaseAuthException catch (e) {
-      return AuthResult(success: false, message: e.message ?? 'Sign up failed.');
+      return AuthResult(success: false, message: mapAuthException(e));
     } catch (e) {
       return AuthResult(success: false, message: 'Sign up error: $e');
     }
@@ -263,16 +287,27 @@ class AuthService extends ChangeNotifier {
     required String email,
     required String otp,
   }) async {
-    final cleanEmail = email.trim().toLowerCase();
     final cleanOtp = otp.trim();
-    final cachedOtp = _otpCache[cleanEmail];
 
-    // Accept generated OTP or universal testing master OTP 123456
-    if (cleanOtp == cachedOtp || cleanOtp == '123456') {
-      if (_currentUser != null) {
-        _currentUser = _currentUser!.copyWith(isEmailVerified: true);
-        _notifyStateChange();
+    if (_isFirebaseAvailable) {
+      try {
+        await _callFunction('verifyEmailOtp', {'otp': cleanOtp});
+        await _refreshFirebaseUser();
+        _markCurrentUserVerified();
+        return AuthResult(
+          success: true,
+          message: 'Email successfully verified! Redirecting to Dashboard...',
+        );
+      } on FirebaseFunctionsException catch (e) {
+        return AuthResult(success: false, message: mapFunctionsException(e));
+      } catch (e) {
+        return AuthResult(success: false, message: 'Verification error: $e');
       }
+    }
+
+    if (cleanOtp == _localOtpCache[email.trim().toLowerCase()]) {
+      _localOtpCache.remove(email.trim().toLowerCase());
+      _markCurrentUserVerified();
       return AuthResult(
         success: true,
         message: 'Email successfully verified! Redirecting to Dashboard...',
@@ -294,10 +329,29 @@ class AuthService extends ChangeNotifier {
       return AuthResult(success: false, message: 'Please provide a valid email address.');
     }
 
-    final otp = _generateOtp(cleanEmail);
+    if (_isFirebaseAvailable) {
+      try {
+        final data = await _callFunction('requestOtp', {'purpose': 'verify_email'});
+        if (data['alreadyVerified'] == true) {
+          await _refreshFirebaseUser();
+          _markCurrentUserVerified();
+          return AuthResult(success: true, message: 'Your email is already verified.');
+        }
+        return AuthResult(
+          success: true,
+          message: 'A new 6-digit verification code was sent to $cleanEmail.',
+        );
+      } on FirebaseFunctionsException catch (e) {
+        return AuthResult(success: false, message: mapFunctionsException(e));
+      } catch (e) {
+        return AuthResult(success: false, message: 'Could not send verification code: $e');
+      }
+    }
+
+    final otp = _generateLocalOtp(cleanEmail);
     return AuthResult(
       success: true,
-      message: 'New verification OTP sent! Your code is: $otp',
+      message: 'New verification OTP generated (offline mode: see debug console).',
       otpCode: otp,
     );
   }
@@ -311,12 +365,14 @@ class AuthService extends ChangeNotifier {
   }
 
   Future<bool> checkEmailVerified() async {
-    if (_currentUser != null) {
-      _currentUser = _currentUser!.copyWith(isEmailVerified: true);
-      _notifyStateChange();
-      return true;
+    if (_currentUser == null) return false;
+    if (_isFirebaseAvailable) {
+      await _refreshFirebaseUser();
+      if (FirebaseAuth.instance.currentUser?.emailVerified == true) {
+        _markCurrentUserVerified();
+      }
     }
-    return false;
+    return _currentUser?.isEmailVerified ?? false;
   }
 
   // -------------------------------------------------------------
@@ -328,19 +384,24 @@ class AuthService extends ChangeNotifier {
       return AuthResult(success: false, message: 'Please enter a valid email address.');
     }
 
-    final otp = _generateOtp(cleanEmail);
-
     if (_isFirebaseAvailable) {
       try {
-        await FirebaseAuth.instance.sendPasswordResetEmail(email: cleanEmail);
-      } catch (_) {
-        // Fall back gracefully to OTP simulation
+        await _callFunction('requestOtp', {'purpose': 'reset_password', 'email': cleanEmail});
+        return AuthResult(
+          success: true,
+          message: 'If an account exists for $cleanEmail, a 6-digit reset code has been emailed to it.',
+        );
+      } on FirebaseFunctionsException catch (e) {
+        return AuthResult(success: false, message: mapFunctionsException(e));
+      } catch (e) {
+        return AuthResult(success: false, message: 'Could not send reset code: $e');
       }
     }
 
+    final otp = _generateLocalOtp(cleanEmail);
     return AuthResult(
       success: true,
-      message: 'Password reset OTP sent! Your 6-digit code is: $otp',
+      message: 'Password reset OTP generated (offline mode: see debug console).',
       otpCode: otp,
     );
   }
@@ -355,11 +416,6 @@ class AuthService extends ChangeNotifier {
   }) async {
     final cleanEmail = email.trim().toLowerCase();
     final cleanOtp = otp.trim();
-    final cachedOtp = _otpCache[cleanEmail];
-
-    if (cleanOtp != cachedOtp && cleanOtp != '123456') {
-      return AuthResult(success: false, message: 'Invalid OTP code. Please verify the code.');
-    }
 
     if (newPassword.length < 6) {
       return AuthResult(success: false, message: 'New password must be at least 6 characters.');
@@ -367,19 +423,51 @@ class AuthService extends ChangeNotifier {
 
     if (_isFirebaseAvailable) {
       try {
-        final fbUser = FirebaseAuth.instance.currentUser;
-        if (fbUser != null && fbUser.email == cleanEmail) {
-          await fbUser.updatePassword(newPassword);
-        }
+        await _callFunction('resetPasswordWithOtp', {
+          'email': cleanEmail,
+          'otp': cleanOtp,
+          'newPassword': newPassword,
+        });
+      } on FirebaseFunctionsException catch (e) {
+        return AuthResult(success: false, message: mapFunctionsException(e));
       } catch (e) {
-        debugPrint('Firebase password update notice: $e');
+        return AuthResult(success: false, message: 'Password reset error: $e');
       }
+    } else {
+      if (cleanOtp != _localOtpCache[cleanEmail]) {
+        return AuthResult(success: false, message: 'Invalid OTP code. Please verify the code.');
+      }
+      _localOtpCache.remove(cleanEmail);
     }
 
     return AuthResult(
       success: true,
       message: 'Password successfully reset! You can now sign in with your new password.',
     );
+  }
+
+  // -------------------------------------------------------------
+  // OTP HELPERS
+  // -------------------------------------------------------------
+  Future<Map<String, dynamic>> _callFunction(String name, Map<String, dynamic> data) async {
+    final result = await FirebaseFunctions.instance.httpsCallable(name).call(data);
+    final payload = result.data;
+    return payload is Map ? Map<String, dynamic>.from(payload) : <String, dynamic>{};
+  }
+
+  Future<void> _refreshFirebaseUser() async {
+    final fbUser = FirebaseAuth.instance.currentUser;
+    if (fbUser == null) return;
+    await fbUser.reload();
+    // Force a fresh ID token so the email_verified claim is up to date.
+    await FirebaseAuth.instance.currentUser?.getIdToken(true);
+  }
+
+  void _markCurrentUserVerified() {
+    if (_currentUser != null) {
+      _currentUser = _currentUser!.copyWith(isEmailVerified: true);
+      _notifyStateChange();
+    }
   }
 
   // -------------------------------------------------------------

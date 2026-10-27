@@ -6,7 +6,15 @@ import '../../services/auth_service.dart';
 class EmailVerificationScreen extends StatefulWidget {
   final VoidCallback onVerified;
 
-  const EmailVerificationScreen({super.key, required this.onVerified});
+  /// Send a fresh code when the screen opens (e.g. an unverified user signing in).
+  /// Sign-up already sends one, so it leaves this off.
+  final bool sendOtpOnOpen;
+
+  const EmailVerificationScreen({
+    super.key,
+    required this.onVerified,
+    this.sendOtpOnOpen = false,
+  });
 
   @override
   State<EmailVerificationScreen> createState() => _EmailVerificationScreenState();
@@ -16,16 +24,17 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
   final AuthService _auth = AuthService();
   final TextEditingController _otpController = TextEditingController();
   bool _isVerifying = false;
-  int _resendCooldown = 30;
+  int _resendCooldown = 60;
   Timer? _timer;
-  String? _lastSentOtp;
 
   @override
   void initState() {
     super.initState();
-    final email = _auth.currentUser?.email ?? '';
-    _lastSentOtp = _auth.getLatestOtpForEmail(email) ?? '123456';
-    _startCooldown();
+    if (widget.sendOtpOnOpen) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _sendOtp(showSuccess: false));
+    } else {
+      _startCooldown();
+    }
   }
 
   @override
@@ -36,10 +45,12 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
   }
 
   void _startCooldown() {
-    setState(() => _resendCooldown = 30);
+    setState(() => _resendCooldown = 60);
     _timer?.cancel();
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (_resendCooldown > 0) {
+      if (!mounted) {
+        timer.cancel();
+      } else if (_resendCooldown > 0) {
         setState(() => _resendCooldown--);
       } else {
         timer.cancel();
@@ -49,14 +60,21 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
 
   Future<void> _handleResend() async {
     if (_resendCooldown > 0) return;
+    await _sendOtp(showSuccess: true);
+  }
+
+  Future<void> _sendOtp({required bool showSuccess}) async {
     final email = _auth.currentUser?.email ?? '';
     final res = await _auth.sendEmailVerificationOtp(email);
-    setState(() {
-      _lastSentOtp = res.otpCode;
-    });
+    if (!mounted) return;
     _startCooldown();
 
-    if (mounted) {
+    if (_auth.currentUser?.isEmailVerified == true) {
+      widget.onVerified();
+      return;
+    }
+
+    if (showSuccess || !res.success) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(res.message),
@@ -169,7 +187,7 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
                 ),
                 const SizedBox(height: 24),
 
-                // OTP Test Helper Notice
+                // OTP Delivery Notice
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
@@ -181,27 +199,12 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
                     children: [
                       const Icon(Icons.info_outline, size: 18, color: AppColors.primary),
                       const SizedBox(width: 10),
-                      Expanded(
+                      const Expanded(
                         child: Text(
-                          _lastSentOtp != null
-                              ? 'Your Verification OTP is: $_lastSentOtp'
-                              : 'Enter the 6-digit OTP code sent, or use master OTP 123456.',
-                          style: const TextStyle(fontSize: 12, color: AppColors.primary, fontWeight: FontWeight.w600),
+                          'The code expires in 10 minutes. Check your spam folder if you don’t see it.',
+                          style: TextStyle(fontSize: 12, color: AppColors.primary, fontWeight: FontWeight.w600),
                         ),
                       ),
-                      if (_lastSentOtp != null)
-                        TextButton(
-                          style: TextButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                            minimumSize: Size.zero,
-                          ),
-                          onPressed: () {
-                            setState(() {
-                              _otpController.text = _lastSentOtp!;
-                            });
-                          },
-                          child: const Text('Auto-Fill', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.primary)),
-                        ),
                     ],
                   ),
                 ),
@@ -294,7 +297,9 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
                   icon: const Icon(Icons.arrow_back, size: 16),
                   label: const Text('Return to Login'),
                   onPressed: () async {
+                    final navigator = Navigator.of(context);
                     await _auth.signOut();
+                    if (navigator.canPop()) navigator.pop();
                   },
                 ),
               ],
