@@ -31,5 +31,10 @@ service cloud.firestore {
     match /transit_items/{transitId} {
       allow read, write: if true;
     }
+
+    // 6. Email OTP codes: only Cloud Functions (Admin SDK) may touch these
+    match /email_otps/{otpId} {
+      allow read, write: if false;
+    }
   }
 }

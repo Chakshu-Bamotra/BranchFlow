@@ -43,11 +43,12 @@ class _AuthScreenState extends State<AuthScreen> {
     );
   }
 
-  void _navigateToVerification() {
+  void _navigateToVerification({bool codeAlreadySent = false}) {
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => EmailVerificationScreen(
           onVerified: _navigateToHome,
+          codeAlreadySent: codeAlreadySent,
         ),
       ),
     );
@@ -102,7 +103,16 @@ class _AuthScreenState extends State<AuthScreen> {
     if (res.success) {
       _syncUserRole();
       if (res.requiresVerification) {
-        _navigateToVerification();
+        if (mounted && !res.codeSent) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(res.message),
+              backgroundColor: AppColors.danger,
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+        _navigateToVerification(codeAlreadySent: res.codeSent);
       } else {
         _navigateToHome();
       }
@@ -140,7 +150,8 @@ class _AuthScreenState extends State<AuthScreen> {
 
     bool isSubmitting = false;
     bool otpSent = false;
-    String? testOtp;
+    String? sentMessage;
+    String? errorText;
 
     showDialog(
       context: context,
@@ -188,9 +199,7 @@ class _AuthScreenState extends State<AuthScreen> {
                           border: Border.all(color: const Color(0xFFD4E8DA)),
                         ),
                         child: Text(
-                          testOtp != null
-                              ? 'OTP sent! Your test code is: $testOtp'
-                              : 'Check your email for the 6-digit OTP code (or use 123456).',
+                          sentMessage ?? 'Check your email for the 6-digit code.',
                           style: const TextStyle(fontSize: 12, color: AppColors.primary, fontWeight: FontWeight.w600),
                         ),
                       ),
@@ -218,6 +227,13 @@ class _AuthScreenState extends State<AuthScreen> {
                         ),
                       ),
                     ],
+                    if (errorText != null) ...[
+                      const SizedBox(height: 12),
+                      Text(
+                        errorText!,
+                        style: const TextStyle(fontSize: 12, color: AppColors.danger, fontWeight: FontWeight.w600),
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -231,22 +247,20 @@ class _AuthScreenState extends State<AuthScreen> {
                     onPressed: isSubmitting
                         ? null
                         : () async {
-                            final messenger = ScaffoldMessenger.of(context);
-                            setDialogState(() => isSubmitting = true);
+                            setDialogState(() {
+                              isSubmitting = true;
+                              errorText = null;
+                            });
                             final res = await _auth.sendPasswordResetOtp(resetEmailController.text);
                             setDialogState(() {
                               isSubmitting = false;
                               if (res.success) {
                                 otpSent = true;
-                                testOtp = res.otpCode;
+                                sentMessage = res.message;
+                              } else {
+                                errorText = res.message;
                               }
                             });
-
-                            if (!res.success) {
-                              messenger.showSnackBar(
-                                SnackBar(content: Text(res.message), backgroundColor: AppColors.danger),
-                              );
-                            }
                           },
                     child: isSubmitting
                         ? const SizedBox(
@@ -261,13 +275,20 @@ class _AuthScreenState extends State<AuthScreen> {
                     onPressed: isSubmitting
                         ? null
                         : () async {
-                            setDialogState(() => isSubmitting = true);
+                            setDialogState(() {
+                              isSubmitting = true;
+                              errorText = null;
+                            });
                             final res = await _auth.resetPasswordWithOtp(
                               email: resetEmailController.text,
                               otp: otpController.text,
                               newPassword: newPasswordController.text,
                             );
-                            setDialogState(() => isSubmitting = false);
+                            setDialogState(() {
+                              isSubmitting = false;
+                              if (!res.success) errorText = res.message;
+                            });
+                            if (!res.success) return;
 
                             if (ctx.mounted) {
                               Navigator.of(ctx).pop();
@@ -276,7 +297,7 @@ class _AuthScreenState extends State<AuthScreen> {
                               ScaffoldMessenger.of(context).showSnackBar(
                                 SnackBar(
                                   content: Text(res.message),
-                                  backgroundColor: res.success ? AppColors.success : AppColors.danger,
+                                  backgroundColor: AppColors.success,
                                   behavior: SnackBarBehavior.floating,
                                 ),
                               );

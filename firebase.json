@@ -1,1 +1,44 @@
-{"firestore":{"rules":"firestore.rules","indexes":"firestore.indexes.json"},"storage":{"rules":"storage.rules"},"flutter":{"platforms":{"android":{"default":{"projectId":"branchflow-production","appId":"1:789746893835:android:9db9e2905709c83138b30e","fileOutput":"android/app/google-services.json"}},"dart":{"lib/firebase_options.dart":{"projectId":"branchflow-production","configurations":{"android":"1:789746893835:android:9db9e2905709c83138b30e","ios":"1:789746893835:ios:28008a861a9b6b8938b30e","macos":"1:789746893835:ios:28008a861a9b6b8938b30e","web":"1:789746893835:web:ae02f5497693bef638b30e","windows":"1:789746893835:web:971a5966f7e91dc538b30e"}}}}}}
+{
+  "firestore": {
+    "rules": "firestore.rules",
+    "indexes": "firestore.indexes.json"
+  },
+  "storage": {
+    "rules": "storage.rules"
+  },
+  "flutter": {
+    "platforms": {
+      "android": {
+        "default": {
+          "projectId": "branchflow-production",
+          "appId": "1:789746893835:android:9db9e2905709c83138b30e",
+          "fileOutput": "android/app/google-services.json"
+        }
+      },
+      "dart": {
+        "lib/firebase_options.dart": {
+          "projectId": "branchflow-production",
+          "configurations": {
+            "android": "1:789746893835:android:9db9e2905709c83138b30e",
+            "ios": "1:789746893835:ios:28008a861a9b6b8938b30e",
+            "macos": "1:789746893835:ios:28008a861a9b6b8938b30e",
+            "web": "1:789746893835:web:ae02f5497693bef638b30e",
+            "windows": "1:789746893835:web:971a5966f7e91dc538b30e"
+          }
+        }
+      }
+    }
+  },
+  "functions": [
+    {
+      "source": "functions",
+      "codebase": "default",
+      "ignore": [
+        "node_modules",
+        ".git",
+        "*.log",
+        "*.test.js"
+      ]
+    }
+  ]
+}
