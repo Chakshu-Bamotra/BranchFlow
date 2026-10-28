@@ -6,6 +6,7 @@ import '../models/transit_item.dart';
 import '../services/auth_service.dart';
 import '../services/library_repository.dart';
 import '../services/firestore_seeder.dart';
+import '../main.dart';
 import 'return_receipt_screen.dart';
 
 class DashboardScreen extends StatelessWidget {
@@ -564,26 +565,6 @@ class DashboardScreen extends StatelessWidget {
                                 ],
                               ),
                             ),
-                            PopupMenuItem(
-                              value: 'toggle_role',
-                              child: Row(
-                                children: [
-                                  Icon(
-                                    repo.currentRole == UserRole.librarian
-                                        ? Icons.person_outline
-                                        : Icons.admin_panel_settings_outlined,
-                                    size: 18,
-                                    color: AppColors.primary,
-                                  ),
-                                  const SizedBox(width: 10),
-                                  Text(
-                                    repo.currentRole == UserRole.librarian
-                                        ? 'Switch to Member Mode'
-                                        : 'Switch to Staff Mode',
-                                  ),
-                                ],
-                              ),
-                            ),
                             const PopupMenuItem(
                               value: 'seed_data',
                               child: Row(
@@ -600,19 +581,13 @@ class DashboardScreen extends StatelessWidget {
                                 children: [
                                   Icon(Icons.logout_rounded, size: 18, color: AppColors.danger),
                                   SizedBox(width: 10),
-                                  Text('Sign Out', style: TextStyle(color: AppColors.danger)),
+                                  Text('Sign Out', style: TextStyle(color: AppColors.danger, fontWeight: FontWeight.bold)),
                                 ],
                               ),
                             ),
                           ],
                           onSelected: (val) async {
-                            if (val == 'toggle_role') {
-                              repo.setRole(
-                                repo.currentRole == UserRole.librarian
-                                    ? UserRole.member
-                                    : UserRole.librarian,
-                              );
-                            } else if (val == 'seed_data') {
+                            if (val == 'seed_data') {
                               final messenger = ScaffoldMessenger.of(context);
                               final res = await FirestoreSeeder.seedInitialData();
                               messenger.showSnackBar(
@@ -624,6 +599,12 @@ class DashboardScreen extends StatelessWidget {
                               );
                             } else if (val == 'sign_out') {
                               await AuthService().signOut();
+                              if (context.mounted) {
+                                Navigator.of(context, rootNavigator: true).pushAndRemoveUntil(
+                                  MaterialPageRoute(builder: (_) => const AuthWrapper()),
+                                  (route) => false,
+                                );
+                              }
                             }
                           },
                         ),
