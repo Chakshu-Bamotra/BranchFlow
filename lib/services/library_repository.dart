@@ -72,6 +72,18 @@ class LibraryRepository extends ChangeNotifier {
     }
   }
 
+  Loan? getActiveLoanByBarcode(String barcode) {
+    try {
+      return _loans.firstWhere(
+        (l) =>
+            l.bookBarcode.trim().toLowerCase() == barcode.trim().toLowerCase() &&
+            l.status == LoanStatus.active,
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
   // Role & Branch Switching
   void setRole(UserRole role) {
     _currentRole = role;
@@ -145,56 +157,53 @@ class LibraryRepository extends ChangeNotifier {
     final staff = staffName ?? 'Staff Member ($returnBranchName)';
     final now = DateTime.now();
 
+    if (loanIndex == -1) {
+      if (book.status == BookStatus.available) {
+        return ReturnResult(
+          success: false,
+          message: 'Item "${book.title}" is not checked out. It is currently available in the collection at ${getBranchById(book.currentBranchId)?.name ?? book.currentBranchId}.',
+        );
+      } else if (book.status == BookStatus.inTransit) {
+        return ReturnResult(
+          success: false,
+          message: 'Item "${book.title}" has already been returned and is in transit to its home library.',
+        );
+      } else if (book.status == BookStatus.inHolding) {
+        return ReturnResult(
+          success: false,
+          message: 'Item "${book.title}" has already been cleared and is staged in holding.',
+        );
+      }
+      return ReturnResult(
+        success: false,
+        message: 'No active loan found for barcode "$cleanBarcode".',
+      );
+    }
+
+    final existingLoan = _loans[loanIndex];
     Loan updatedLoan;
     double savedFine = 0.0;
 
-    if (loanIndex != -1) {
-      final existingLoan = _loans[loanIndex];
-
-      // If returning on time or cross branch, calculate penalty avoided
-      if (now.isBefore(existingLoan.dueDate) ||
-          now.difference(existingLoan.dueDate).inDays <= 0) {
-        // Prevented late fees ($2.50 per projected day of delay avoided)
-        savedFine = 15.00;
-      }
-
-      final receiptCode =
-          'BF-RTN-${now.millisecondsSinceEpoch.toString().substring(7)}-${returnBranch?.code ?? "BR"}';
-
-      updatedLoan = existingLoan.copyWith(
-        status: LoanStatus.returned,
-        returnedAt: now,
-        returnedToBranchId: returnBranchId,
-        returnReceiptCode: receiptCode,
-        receivedByStaff: staff,
-        penaltyAvoided: savedFine,
-      );
-
-      _loans[loanIndex] = updatedLoan;
-    } else {
-      // Standalone return / manual check-in
-      final receiptCode =
-          'BF-RTN-${now.millisecondsSinceEpoch.toString().substring(7)}-${returnBranch?.code ?? "BR"}';
-      updatedLoan = Loan(
-        id: 'LOAN-MANUAL-${now.millisecondsSinceEpoch}',
-        bookId: book.id,
-        bookTitle: book.title,
-        bookBarcode: book.barcode,
-        bookAuthor: book.author,
-        memberId: _currentMemberId,
-        memberName: _currentMemberName,
-        borrowedFromBranchId: book.homeBranchId,
-        borrowedAt: now.subtract(const Duration(days: 7)),
-        dueDate: now.add(const Duration(days: 7)),
-        returnedAt: now,
-        returnedToBranchId: returnBranchId,
-        returnReceiptCode: receiptCode,
-        receivedByStaff: staff,
-        status: LoanStatus.returned,
-        penaltyAvoided: 10.00,
-      );
-      _loans.insert(0, updatedLoan);
+    // If returning on time or cross branch, calculate penalty avoided
+    if (now.isBefore(existingLoan.dueDate) ||
+        now.difference(existingLoan.dueDate).inDays <= 0) {
+      // Prevented late fees ($2.50 per projected day of delay avoided)
+      savedFine = 15.00;
     }
+
+    final receiptCode =
+        'BF-RTN-${now.millisecondsSinceEpoch.toString().substring(7)}-${returnBranch?.code ?? "BR"}';
+
+    updatedLoan = existingLoan.copyWith(
+      status: LoanStatus.returned,
+      returnedAt: now,
+      returnedToBranchId: returnBranchId,
+      returnReceiptCode: receiptCode,
+      receivedByStaff: staff,
+      penaltyAvoided: savedFine,
+    );
+
+    _loans[loanIndex] = updatedLoan;
 
     // Update Book and Inter-Branch Logistics
     final bookIndex = _books.indexWhere((b) => b.id == book.id);

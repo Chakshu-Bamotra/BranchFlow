@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../core/constants/app_colors.dart';
+import '../main.dart';
 import '../services/auth_service.dart';
 import '../services/library_repository.dart';
 import '../widgets/branch_chip.dart';
@@ -12,6 +13,38 @@ class MyLoansScreen extends StatelessWidget {
   final VoidCallback onNavigateToScanner;
 
   const MyLoansScreen({super.key, required this.onNavigateToScanner});
+
+  void _confirmSignOut(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.background,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+        title: const Text('Sign Out', style: TextStyle(fontFamily: 'Georgia', fontWeight: FontWeight.bold)),
+        content: const Text('Are you sure you want to sign out of your library account?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Cancel', style: TextStyle(color: AppColors.textSecondary)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.danger),
+            onPressed: () async {
+              Navigator.of(ctx).pop();
+              await AuthService().signOut();
+              if (context.mounted) {
+                Navigator.of(context, rootNavigator: true).pushAndRemoveUntil(
+                  MaterialPageRoute(builder: (_) => const AuthWrapper()),
+                  (route) => false,
+                );
+              }
+            },
+            child: const Text('Sign Out'),
+          ),
+        ],
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -31,6 +64,13 @@ class MyLoansScreen extends StatelessWidget {
             backgroundColor: AppColors.background,
             appBar: AppBar(
               title: const Text('Account & Loans'),
+              actions: [
+                IconButton(
+                  tooltip: 'Sign Out',
+                  icon: const Icon(Icons.logout_rounded, color: AppColors.danger),
+                  onPressed: () => _confirmSignOut(context),
+                ),
+              ],
               bottom: TabBar(
                 indicatorColor: AppColors.primary,
                 labelColor: AppColors.primary,
