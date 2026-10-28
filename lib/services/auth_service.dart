@@ -3,6 +3,8 @@ import 'package:flutter/foundation.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:cloud_functions/cloud_functions.dart';
+import '../core/config/env.dart';
 
 class UserModel {
   final String uid;
@@ -45,10 +47,9 @@ class AuthService extends ChangeNotifier {
   // Start as null so user must actually enter credentials on startup!
   UserModel? _currentUser;
 
-  // Built-in demo accounts use addresses that can't receive mail, so they skip email verification.
-  static const Set<String> _demoEmails = {'member@branchflow.lib', 'staff@branchflow.lib'};
-
-  static bool _isDemoEmail(String email) => _demoEmails.contains(email.trim().toLowerCase());
+  // Offline-mode only (no Firebase): email -> 6-digit OTP.
+  // With Firebase, codes are generated, emailed and verified by Cloud Functions.
+  final Map<String, String> _localOtpCache = {};
 
   bool get _isFirebaseAvailable {
     try {
@@ -98,42 +99,31 @@ class AuthService extends ChangeNotifier {
     }
   }
 
-  bool checkFirebaseStatus() {
-    return _isFirebaseAvailable;
-  }
-
-  static const String _noServerMessage =
-      'Email codes need a connection to the BranchFlow server. Please check your connection.';
-
-  // Calls a BranchFlow Cloud Function (see functions/index.js). OTP codes are generated,
-  // emailed and checked on the server only; the app never sees them.
-  Future<Map<String, dynamic>> _callFunction(String name, Map<String, dynamic> data) async {
-    final result = await FirebaseFunctions.instance.httpsCallable(name).call<dynamic>(data);
-    final payload = result.data;
-    return payload is Map ? Map<String, dynamic>.from(payload) : <String, dynamic>{};
-  }
-
-  static String _functionErrorMessage(FirebaseFunctionsException e) {
+  static String mapFunctionsException(FirebaseFunctionsException e) {
     final message = e.message;
-    // Errors raised by our functions carry a readable message; transport errors
-    // (function not deployed, offline, etc.) only carry the bare status code.
-    if (message == null || message.isEmpty || message.toUpperCase() == message) {
-      return 'Could not reach the verification server. Please try again shortly.';
+    // Undeployed or unreachable functions surface bare codes like "internal" / "NOT_FOUND".
+    if (message == null || message.isEmpty || message.toLowerCase().replaceAll('_', '-') == e.code) {
+      return 'The verification service is unavailable right now. Please try again later.';
     }
     return message;
   }
 
-  // Refreshes the Firebase user so emailVerified reflects changes made by the server.
-  Future<bool> _reloadEmailVerified() async {
-    final fbUser = FirebaseAuth.instance.currentUser;
-    if (fbUser == null) return false;
-    await fbUser.reload();
-    final refreshed = FirebaseAuth.instance.currentUser;
-    if (refreshed?.emailVerified == true) {
-      await refreshed!.getIdToken(true);
-      return true;
-    }
-    return false;
+  bool checkFirebaseStatus() {
+    return _isFirebaseAvailable;
+  }
+
+  String _generateLocalOtp(String email) {
+    final cleanEmail = email.trim().toLowerCase();
+    final otp = (100000 + Random.secure().nextInt(900000)).toString();
+    _localOtpCache[cleanEmail] = otp;
+    debugPrint('*** [offline mode] OTP FOR $cleanEmail: $otp ***');
+    return otp;
+  }
+
+  // Built-in demo accounts use non-deliverable addresses, so they skip email verification.
+  static bool _isDemoAccount(String email) {
+    final clean = email.trim().toLowerCase();
+    return clean == Env.defaultLibrarianEmail || clean == Env.defaultMemberEmail;
   }
 
   // -------------------------------------------------------------
@@ -161,7 +151,7 @@ class AuthService extends ChangeNotifier {
             email: fbUser?.email ?? cleanEmail,
             displayName: fbUser?.displayName ?? cleanEmail.split('@').first,
             role: cleanEmail.contains('staff') || cleanEmail.contains('admin') ? 'librarian' : 'member',
-            isEmailVerified: (fbUser?.emailVerified ?? false) || _isDemoEmail(cleanEmail),
+            isEmailVerified: fbUser?.emailVerified == true || _isDemoAccount(cleanEmail),
           );
         } on FirebaseAuthException catch (e) {
           // If demo user does not exist in Firebase Auth yet, auto-provision it
@@ -238,42 +228,51 @@ class AuthService extends ChangeNotifier {
     }
 
     try {
-      if (!_isFirebaseAvailable) {
-        // Offline local mode has no server to email codes, so accounts start verified.
-        await Future.delayed(const Duration(milliseconds: 500));
+      if (_isFirebaseAvailable) {
+        final credential = await FirebaseAuth.instance.createUserWithEmailAndPassword(
+          email: cleanEmail,
+          password: password,
+        );
+        final fbUser = credential.user;
+        await fbUser?.updateDisplayName(fullName);
+
         _currentUser = UserModel(
-          uid: 'UID-${cleanEmail.hashCode.abs()}',
+          uid: fbUser?.uid ?? 'UID-${DateTime.now().millisecondsSinceEpoch}',
           email: cleanEmail,
           displayName: fullName,
           role: role,
-          isEmailVerified: true,
+          isEmailVerified: false,
+        );
+        _notifyStateChange();
+
+        // Account exists now; email the verification code.
+        final otpRes = await sendEmailVerificationOtp(cleanEmail);
+        return AuthResult(
+          success: true,
+          message: otpRes.success
+              ? 'Account created! We emailed a 6-digit verification code to $cleanEmail.'
+              : 'Account created, but we could not send the code: ${otpRes.message}',
+          requiresVerification: true,
         );
         _notifyStateChange();
         return AuthResult(success: true, message: 'Account created (offline mode).');
       }
 
-      final credential = await FirebaseAuth.instance.createUserWithEmailAndPassword(
-        email: cleanEmail,
-        password: password,
-      );
-      final fbUser = credential.user;
-      await fbUser?.updateDisplayName(fullName);
-
+      await Future.delayed(const Duration(milliseconds: 500));
       _currentUser = UserModel(
-        uid: fbUser?.uid ?? 'UID-${DateTime.now().millisecondsSinceEpoch}',
+        uid: 'UID-${cleanEmail.hashCode.abs()}',
         email: cleanEmail,
         displayName: fullName,
         role: role,
         isEmailVerified: false,
       );
       _notifyStateChange();
+      final otp = _generateLocalOtp(cleanEmail);
 
       final sendRes = await sendEmailVerificationOtp();
       return AuthResult(
         success: true,
-        message: sendRes.success
-            ? 'Account created! We emailed a 6-digit verification code to $cleanEmail.'
-            : 'Account created, but the code could not be sent: ${sendRes.message}',
+        message: 'Account created! (Offline mode: the OTP is printed to the debug console.)',
         requiresVerification: true,
         codeSent: sendRes.success,
       );
@@ -287,19 +286,31 @@ class AuthService extends ChangeNotifier {
   // -------------------------------------------------------------
   // OTP EMAIL VERIFICATION
   // -------------------------------------------------------------
-  Future<AuthResult> verifyEmailWithOtp(String otp) async {
-    if (!_isFirebaseAvailable) return AuthResult(success: false, message: _noServerMessage);
-    if (FirebaseAuth.instance.currentUser == null) {
-      return AuthResult(success: false, message: 'Your session has ended. Please sign in again.');
+  Future<AuthResult> verifyEmailWithOtp({
+    required String email,
+    required String otp,
+  }) async {
+    final cleanOtp = otp.trim();
+
+    if (_isFirebaseAvailable) {
+      try {
+        await _callFunction('verifyEmailOtp', {'otp': cleanOtp});
+        await _refreshFirebaseUser();
+        _markCurrentUserVerified();
+        return AuthResult(
+          success: true,
+          message: 'Email successfully verified! Redirecting to Dashboard...',
+        );
+      } on FirebaseFunctionsException catch (e) {
+        return AuthResult(success: false, message: mapFunctionsException(e));
+      } catch (e) {
+        return AuthResult(success: false, message: 'Verification error: $e');
+      }
     }
 
-    try {
-      await _callFunction('verifyEmailOtp', {'code': otp.trim()});
-      await _reloadEmailVerified();
-      if (_currentUser != null) {
-        _currentUser = _currentUser!.copyWith(isEmailVerified: true);
-        _notifyStateChange();
-      }
+    if (cleanOtp == _localOtpCache[email.trim().toLowerCase()]) {
+      _localOtpCache.remove(email.trim().toLowerCase());
+      _markCurrentUserVerified();
       return AuthResult(
         success: true,
         message: 'Email successfully verified! Redirecting to Dashboard...',
@@ -320,36 +331,49 @@ class AuthService extends ChangeNotifier {
       return AuthResult(success: false, message: 'Your session has ended. Please sign in again.');
     }
 
-    try {
-      final data = await _callFunction('requestEmailOtp', {'purpose': 'verify'});
-      if (data['alreadyVerified'] == true) {
-        await checkEmailVerified();
-        return AuthResult(success: true, message: 'Your email is already verified.');
+    if (_isFirebaseAvailable) {
+      try {
+        final data = await _callFunction('requestOtp', {'purpose': 'verify_email'});
+        if (data['alreadyVerified'] == true) {
+          await _refreshFirebaseUser();
+          _markCurrentUserVerified();
+          return AuthResult(success: true, message: 'Your email is already verified.');
+        }
+        return AuthResult(
+          success: true,
+          message: 'A new 6-digit verification code was sent to $cleanEmail.',
+        );
+      } on FirebaseFunctionsException catch (e) {
+        return AuthResult(success: false, message: mapFunctionsException(e));
+      } catch (e) {
+        return AuthResult(success: false, message: 'Could not send verification code: $e');
       }
-      return AuthResult(
-        success: true,
-        message: 'A new 6-digit code was sent to ${_currentUser?.email ?? 'your email'}.',
-      );
-    } on FirebaseFunctionsException catch (e) {
-      return AuthResult(success: false, message: _functionErrorMessage(e));
-    } catch (e) {
-      return AuthResult(success: false, message: 'Could not send code: $e');
+    }
+
+    final otp = _generateLocalOtp(cleanEmail);
+    return AuthResult(
+      success: true,
+      message: 'New verification OTP generated (offline mode: see debug console).',
+      otpCode: otp,
+    );
+  }
+
+  // Backward-compatible method
+  Future<AuthResult> sendEmailVerification() async {
+    if (_currentUser == null) {
+      return AuthResult(success: false, message: 'No user currently signed in.');
     }
   }
 
   Future<bool> checkEmailVerified() async {
-    if (!_isFirebaseAvailable || _currentUser == null) return false;
-    try {
-      final verified = await _reloadEmailVerified();
-      if (verified) {
-        _currentUser = _currentUser!.copyWith(isEmailVerified: true);
-        _notifyStateChange();
+    if (_currentUser == null) return false;
+    if (_isFirebaseAvailable) {
+      await _refreshFirebaseUser();
+      if (FirebaseAuth.instance.currentUser?.emailVerified == true) {
+        _markCurrentUserVerified();
       }
-      return verified;
-    } catch (e) {
-      debugPrint('Email verification check failed: $e');
-      return false;
     }
+    return _currentUser?.isEmailVerified ?? false;
   }
 
   // -------------------------------------------------------------
@@ -362,18 +386,26 @@ class AuthService extends ChangeNotifier {
     }
     if (!_isFirebaseAvailable) return AuthResult(success: false, message: _noServerMessage);
 
-    try {
-      await _callFunction('requestEmailOtp', {'purpose': 'reset', 'email': cleanEmail});
-      // The server answers the same way for unknown emails, so accounts can't be probed.
-      return AuthResult(
-        success: true,
-        message: 'If an account exists for $cleanEmail, a 6-digit code has been emailed to it.',
-      );
-    } on FirebaseFunctionsException catch (e) {
-      return AuthResult(success: false, message: _functionErrorMessage(e));
-    } catch (e) {
-      return AuthResult(success: false, message: 'Could not send code: $e');
+    if (_isFirebaseAvailable) {
+      try {
+        await _callFunction('requestOtp', {'purpose': 'reset_password', 'email': cleanEmail});
+        return AuthResult(
+          success: true,
+          message: 'If an account exists for $cleanEmail, a 6-digit reset code has been emailed to it.',
+        );
+      } on FirebaseFunctionsException catch (e) {
+        return AuthResult(success: false, message: mapFunctionsException(e));
+      } catch (e) {
+        return AuthResult(success: false, message: 'Could not send reset code: $e');
+      }
     }
+
+    final otp = _generateLocalOtp(cleanEmail);
+    return AuthResult(
+      success: true,
+      message: 'Password reset OTP generated (offline mode: see debug console).',
+      otpCode: otp,
+    );
   }
 
   Future<AuthResult> resetPasswordWithOtp({
@@ -382,28 +414,54 @@ class AuthService extends ChangeNotifier {
     required String newPassword,
   }) async {
     final cleanEmail = email.trim().toLowerCase();
-    if (otp.trim().length != 6) {
-      return AuthResult(success: false, message: 'Please enter the 6-digit code from your email.');
-    }
+    final cleanOtp = otp.trim();
+
     if (newPassword.length < 6) {
       return AuthResult(success: false, message: 'New password must be at least 6 characters.');
     }
     if (!_isFirebaseAvailable) return AuthResult(success: false, message: _noServerMessage);
 
-    try {
-      await _callFunction('resetPasswordWithOtp', {
-        'email': cleanEmail,
-        'code': otp.trim(),
-        'newPassword': newPassword,
-      });
-      return AuthResult(
-        success: true,
-        message: 'Password successfully reset! You can now sign in with your new password.',
-      );
-    } on FirebaseFunctionsException catch (e) {
-      return AuthResult(success: false, message: _functionErrorMessage(e));
-    } catch (e) {
-      return AuthResult(success: false, message: 'Password reset error: $e');
+    if (_isFirebaseAvailable) {
+      try {
+        await _callFunction('resetPasswordWithOtp', {
+          'email': cleanEmail,
+          'otp': cleanOtp,
+          'newPassword': newPassword,
+        });
+      } on FirebaseFunctionsException catch (e) {
+        return AuthResult(success: false, message: mapFunctionsException(e));
+      } catch (e) {
+        return AuthResult(success: false, message: 'Password reset error: $e');
+      }
+    } else {
+      if (cleanOtp != _localOtpCache[cleanEmail]) {
+        return AuthResult(success: false, message: 'Invalid OTP code. Please verify the code.');
+      }
+      _localOtpCache.remove(cleanEmail);
+    }
+  }
+
+  // -------------------------------------------------------------
+  // OTP HELPERS
+  // -------------------------------------------------------------
+  Future<Map<String, dynamic>> _callFunction(String name, Map<String, dynamic> data) async {
+    final result = await FirebaseFunctions.instance.httpsCallable(name).call(data);
+    final payload = result.data;
+    return payload is Map ? Map<String, dynamic>.from(payload) : <String, dynamic>{};
+  }
+
+  Future<void> _refreshFirebaseUser() async {
+    final fbUser = FirebaseAuth.instance.currentUser;
+    if (fbUser == null) return;
+    await fbUser.reload();
+    // Force a fresh ID token so the email_verified claim is up to date.
+    await FirebaseAuth.instance.currentUser?.getIdToken(true);
+  }
+
+  void _markCurrentUserVerified() {
+    if (_currentUser != null) {
+      _currentUser = _currentUser!.copyWith(isEmailVerified: true);
+      _notifyStateChange();
     }
   }
 

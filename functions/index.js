@@ -1,206 +1,272 @@
-const crypto = require("crypto");
-const { initializeApp } = require("firebase-admin/app");
-const { getAuth } = require("firebase-admin/auth");
-const { getFirestore, Timestamp } = require("firebase-admin/firestore");
-const { setGlobalOptions } = require("firebase-functions/v2");
-const { onCall, HttpsError } = require("firebase-functions/v2/https");
-const { defineInt, defineSecret, defineString } = require("firebase-functions/params");
-const logger = require("firebase-functions/logger");
-const nodemailer = require("nodemailer");
-const otp = require("./otp");
+/**
+ * BranchFlow Cloud Functions — Email OTP
+ *
+ * Callable functions used by the Flutter app:
+ *   - requestOtp            : generate a 6-digit code and email it
+ *                             (purpose: 'verify_email' | 'reset_password')
+ *   - verifyEmailOtp        : confirm a sign-up code and mark the account verified
+ *   - resetPasswordWithOtp  : confirm a reset code and set a new password
+ *
+ * Codes are never returned to the client. Only a SHA-256 hash is stored in
+ * Firestore (`otp_codes`, locked down by security rules), with an expiry,
+ * a resend cooldown and a maximum number of attempts.
+ */
+const crypto = require('crypto');
+const nodemailer = require('nodemailer');
+const { initializeApp } = require('firebase-admin/app');
+const { getAuth } = require('firebase-admin/auth');
+const { getFirestore, FieldValue, Timestamp } = require('firebase-admin/firestore');
+const { onCall, HttpsError } = require('firebase-functions/v2/https');
+const { defineSecret, defineString, defineInt } = require('firebase-functions/params');
+const logger = require('firebase-functions/logger');
 
 initializeApp();
-setGlobalOptions({ maxInstances: 10 });
+const db = getFirestore();
 
-// SMTP settings. Non-secret values go in functions/.env, the password in Secret Manager:
-//   firebase functions:secrets:set SMTP_PASS
-const SMTP_HOST = defineString("SMTP_HOST");
-const SMTP_PORT = defineInt("SMTP_PORT", { default: 465 });
-const SMTP_USER = defineString("SMTP_USER");
-const MAIL_FROM = defineString("MAIL_FROM");
-const SMTP_PASS = defineSecret("SMTP_PASS");
+// -------------------------------------------------------------
+// CONFIG (set with `firebase functions:secrets:set` / .env)
+// -------------------------------------------------------------
+const SMTP_USER = defineSecret('SMTP_USER');
+const SMTP_PASS = defineSecret('SMTP_PASS');
+const SMTP_HOST = defineString('SMTP_HOST', { default: 'smtp.gmail.com' });
+const SMTP_PORT = defineInt('SMTP_PORT', { default: 465 });
+const MAIL_FROM = defineString('MAIL_FROM', { default: '' });
 
-const OTP_COLLECTION = "email_otps";
+const OTP_TTL_MINUTES = 10;
+const RESEND_COOLDOWN_SECONDS = 60;
+const MAX_ATTEMPTS = 5;
 
-let transporter;
-function getTransporter() {
-  if (!transporter) {
-    transporter = nodemailer.createTransport({
-      host: SMTP_HOST.value(),
-      port: SMTP_PORT.value(),
-      secure: SMTP_PORT.value() === 465,
-      auth: { user: SMTP_USER.value(), pass: SMTP_PASS.value() },
-    });
-  }
-  return transporter;
-}
+const PURPOSES = {
+  verify_email: {
+    subject: 'Verify your BranchFlow email',
+    heading: 'Verify your email address',
+    intro: 'Use the code below to finish creating your BranchFlow account.',
+  },
+  reset_password: {
+    subject: 'Your BranchFlow password reset code',
+    heading: 'Reset your password',
+    intro: 'Use the code below to reset your BranchFlow password.',
+  },
+};
 
-async function sendOtpEmail(email, code, purpose) {
-  const minutes = otp.OTP_TTL_MS / 60000;
-  const subject = purpose === "verify"
-    ? "Your BranchFlow verification code"
-    : "Your BranchFlow password reset code";
-  const intro = purpose === "verify"
-    ? "Use this code to verify your email address for BranchFlow:"
-    : "Use this code to reset your BranchFlow password:";
+const callableOptions = { secrets: [SMTP_USER, SMTP_PASS] };
 
-  await getTransporter().sendMail({
-    from: MAIL_FROM.value(),
-    to: email,
-    subject,
-    text: `${intro}\n\n${code}\n\nThe code expires in ${minutes} minutes. ` +
-      "If you didn't request it, you can ignore this email.",
-    html: `<p>${intro}</p>
-<p style="font-size:28px;font-weight:bold;letter-spacing:6px">${code}</p>
-<p>The code expires in ${minutes} minutes. If you didn't request it, you can ignore this email.</p>`,
-  });
-}
-
-function requirePurpose(purpose) {
-  if (!otp.PURPOSES.includes(purpose)) {
-    throw new HttpsError("invalid-argument", "Unknown OTP purpose.");
-  }
-}
-
-function requireEmail(raw) {
-  const email = otp.normalizeEmail(raw);
-  if (!otp.isValidEmail(email)) {
-    throw new HttpsError("invalid-argument", "Please enter a valid email address.");
+// -------------------------------------------------------------
+// HELPERS
+// -------------------------------------------------------------
+function normalizeEmail(raw) {
+  const email = String(raw || '').trim().toLowerCase();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    throw new HttpsError('invalid-argument', 'Please enter a valid email address.');
   }
   return email;
 }
 
-async function findUserByEmail(email) {
-  try {
-    return await getAuth().getUserByEmail(email);
-  } catch (e) {
-    if (e.code === "auth/user-not-found") return null;
-    throw e;
-  }
+function otpDocId(purpose, email) {
+  const emailHash = crypto.createHash('sha256').update(email).digest('hex');
+  return `${purpose}_${emailHash}`;
 }
 
-// Creates a fresh code for (purpose, email), enforcing cooldown and hourly limits, then emails it.
-async function issueCode(purpose, email, uid) {
-  const db = getFirestore();
-  const ref = db.collection(OTP_COLLECTION).doc(otp.otpDocId(purpose, email));
-  const code = otp.generateCode();
-  const salt = crypto.randomBytes(16).toString("hex");
-  const now = Date.now();
+function hashCode(docId, code) {
+  return crypto.createHash('sha256').update(`${docId}:${code}`).digest('hex');
+}
 
-  const decision = await db.runTransaction(async (tx) => {
-    const snap = await tx.get(ref);
-    const result = otp.checkSendAllowed(snap.exists ? snap.data() : null, now);
-    if (!result.ok) return result;
-    tx.set(ref, {
-      uid,
-      purpose,
-      salt,
-      codeHash: otp.hashCode(code, salt),
-      attempts: 0,
-      expiresAt: now + otp.OTP_TTL_MS,
-      lastSentAt: now,
-      windowStart: result.windowStart,
-      sendCount: result.sendCount,
-      // Lets a Firestore TTL policy on `ttl` clean up stale docs (optional).
-      ttl: Timestamp.fromMillis(now + 60 * 60 * 1000),
-    });
-    return result;
+function safeEqual(a, b) {
+  const bufA = Buffer.from(a);
+  const bufB = Buffer.from(b);
+  return bufA.length === bufB.length && crypto.timingSafeEqual(bufA, bufB);
+}
+
+function generateCode() {
+  return crypto.randomInt(0, 1000000).toString().padStart(6, '0');
+}
+
+function renderEmail(purpose, code) {
+  const copy = PURPOSES[purpose];
+  const text =
+    `${copy.heading}\n\n${copy.intro}\n\n` +
+    `Your code: ${code}\n\n` +
+    `This code expires in ${OTP_TTL_MINUTES} minutes. ` +
+    `If you did not request it, you can safely ignore this email.`;
+  const html = `
+  <div style="font-family:Arial,Helvetica,sans-serif;max-width:480px;margin:0 auto;padding:24px;color:#1f2937">
+    <h2 style="margin:0 0 8px">${copy.heading}</h2>
+    <p style="margin:0 0 20px;color:#4b5563">${copy.intro}</p>
+    <div style="font-size:32px;font-weight:bold;letter-spacing:8px;text-align:center;
+                padding:16px;border-radius:12px;background:#f3f4f6">${code}</div>
+    <p style="margin:20px 0 0;font-size:13px;color:#6b7280">
+      This code expires in ${OTP_TTL_MINUTES} minutes. If you did not request it, you can safely ignore this email.
+    </p>
+  </div>`;
+  return { subject: copy.subject, text, html };
+}
+
+async function sendOtpEmail(to, purpose, code) {
+  const port = SMTP_PORT.value();
+  const transporter = nodemailer.createTransport({
+    host: SMTP_HOST.value(),
+    port,
+    secure: port === 465,
+    auth: { user: SMTP_USER.value(), pass: SMTP_PASS.value() },
+  });
+  const from = MAIL_FROM.value() || `BranchFlow <${SMTP_USER.value()}>`;
+  await transporter.sendMail({ from, to, ...renderEmail(purpose, code) });
+}
+
+/** Creates a fresh code for (purpose, email), stores its hash and emails it. */
+async function issueOtp(purpose, email, uid) {
+  const docId = otpDocId(purpose, email);
+  const ref = db.collection('otp_codes').doc(docId);
+
+  const existing = await ref.get();
+  if (existing.exists) {
+    const sentAt = existing.get('createdAt');
+    const elapsed = sentAt ? (Date.now() - sentAt.toMillis()) / 1000 : Infinity;
+    if (elapsed < RESEND_COOLDOWN_SECONDS) {
+      const wait = Math.ceil(RESEND_COOLDOWN_SECONDS - elapsed);
+      throw new HttpsError('resource-exhausted', `Please wait ${wait}s before requesting a new code.`);
+    }
+  }
+
+  const code = generateCode();
+  await ref.set({
+    email,
+    uid,
+    purpose,
+    codeHash: hashCode(docId, code),
+    attempts: 0,
+    createdAt: FieldValue.serverTimestamp(),
+    expiresAt: Timestamp.fromMillis(Date.now() + OTP_TTL_MINUTES * 60 * 1000),
   });
 
-  if (!decision.ok) {
-    const seconds = Math.ceil(decision.retryAfterMs / 1000);
-    throw new HttpsError("resource-exhausted",
-      `Please wait ${seconds}s before requesting another code.`, { retryAfterSeconds: seconds });
-  }
-
   try {
-    await sendOtpEmail(email, code, purpose);
-  } catch (e) {
-    logger.error("Failed to send OTP email", { purpose, error: e.message });
+    await sendOtpEmail(email, purpose, code);
+  } catch (err) {
+    logger.error('Failed to send OTP email', { purpose, error: err.message });
     await ref.delete();
-    throw new HttpsError("unavailable", "We couldn't send the email right now. Please try again shortly.");
+    throw new HttpsError('internal', 'We could not send the email right now. Please try again shortly.');
   }
 }
 
-// Checks a code and consumes it on success. Wrong guesses count toward the attempt limit.
-async function consumeCode(purpose, email, code) {
-  const db = getFirestore();
-  const ref = db.collection(OTP_COLLECTION).doc(otp.otpDocId(purpose, email));
+/** Checks a submitted code. Consumes it on success, counts attempts on failure. */
+async function consumeOtp(purpose, email, rawCode) {
+  const code = String(rawCode || '').trim();
+  if (!/^\d{6}$/.test(code)) {
+    throw new HttpsError('invalid-argument', 'Please enter the 6-digit code.');
+  }
+
+  const docId = otpDocId(purpose, email);
+  const ref = db.collection('otp_codes').doc(docId);
 
   const outcome = await db.runTransaction(async (tx) => {
     const snap = await tx.get(ref);
-    const data = snap.exists ? snap.data() : null;
-    const status = otp.checkCode(data, code, Date.now());
-    if (status === "ok") {
+    if (!snap.exists) return { status: 'missing' };
+
+    const data = snap.data();
+    if (data.expiresAt.toMillis() < Date.now()) {
       tx.delete(ref);
-    } else if (status === "mismatch") {
-      tx.update(ref, { attempts: data.attempts + 1 });
+      return { status: 'expired' };
     }
-    return { status, attemptsLeft: data ? otp.MAX_VERIFY_ATTEMPTS - data.attempts - 1 : 0 };
+    if (data.attempts >= MAX_ATTEMPTS) {
+      tx.delete(ref);
+      return { status: 'locked' };
+    }
+    if (!safeEqual(data.codeHash, hashCode(docId, code))) {
+      const attempts = data.attempts + 1;
+      if (attempts >= MAX_ATTEMPTS) {
+        tx.delete(ref);
+        return { status: 'locked' };
+      }
+      tx.update(ref, { attempts });
+      return { status: 'invalid', remaining: MAX_ATTEMPTS - attempts };
+    }
+    tx.delete(ref);
+    return { status: 'ok', uid: data.uid };
   });
 
   switch (outcome.status) {
-    case "ok":
-      return;
-    case "missing":
-      throw new HttpsError("not-found", "No active code for this email. Please request a new one.");
-    case "expired":
-      throw new HttpsError("deadline-exceeded", "This code has expired. Please request a new one.");
-    case "locked":
-      throw new HttpsError("permission-denied", "Too many incorrect attempts. Please request a new code.");
+    case 'ok':
+      return outcome;
+    case 'invalid':
+      throw new HttpsError(
+        'permission-denied',
+        `Invalid OTP code. ${outcome.remaining} attempt${outcome.remaining === 1 ? '' : 's'} remaining.`,
+      );
+    case 'expired':
+      throw new HttpsError('deadline-exceeded', 'This code has expired. Please request a new one.');
+    case 'locked':
+      throw new HttpsError('permission-denied', 'Too many incorrect attempts. Please request a new code.');
     default:
-      throw new HttpsError("invalid-argument", outcome.attemptsLeft > 0
-        ? `Incorrect code. ${outcome.attemptsLeft} attempt(s) left.`
-        : "Incorrect code. Please request a new one.");
+      throw new HttpsError('not-found', 'No active code found. Please request a new one.');
   }
 }
 
-// data: { purpose: "verify" } (signed in) or { purpose: "reset", email }
-exports.requestEmailOtp = onCall({ secrets: [SMTP_PASS] }, async (request) => {
+// -------------------------------------------------------------
+// CALLABLE: requestOtp
+// -------------------------------------------------------------
+exports.requestOtp = onCall(callableOptions, async (request) => {
   const purpose = request.data?.purpose;
-  requirePurpose(purpose);
+  if (!PURPOSES[purpose]) {
+    throw new HttpsError('invalid-argument', 'Unknown OTP purpose.');
+  }
 
-  if (purpose === "verify") {
-    if (!request.auth) throw new HttpsError("unauthenticated", "Please sign in first.");
+  if (purpose === 'verify_email') {
+    // Only the signed-in user may request a verification code for their own email.
+    if (!request.auth) {
+      throw new HttpsError('unauthenticated', 'Please sign in to verify your email.');
+    }
+    const email = normalizeEmail(request.auth.token.email);
     const user = await getAuth().getUser(request.auth.uid);
-    if (!user.email) throw new HttpsError("failed-precondition", "This account has no email address.");
-    if (user.emailVerified) return { sent: false, alreadyVerified: true };
-    await issueCode("verify", otp.normalizeEmail(user.email), user.uid);
+    if (user.emailVerified) {
+      return { sent: false, alreadyVerified: true };
+    }
+    await issueOtp(purpose, email, user.uid);
     return { sent: true };
   }
 
-  const email = requireEmail(request.data?.email);
-  const user = await findUserByEmail(email);
-  // Respond the same way whether or not the account exists, so emails can't be probed.
-  if (user) await issueCode("reset", email, user.uid);
+  // reset_password: respond the same way whether or not the account exists,
+  // so the endpoint cannot be used to discover registered emails.
+  const email = normalizeEmail(request.data?.email);
+  let user;
+  try {
+    user = await getAuth().getUserByEmail(email);
+  } catch (err) {
+    if (err.code === 'auth/user-not-found') return { sent: true };
+    throw err;
+  }
+  await issueOtp(purpose, email, user.uid);
   return { sent: true };
 });
 
-// data: { code }
+// -------------------------------------------------------------
+// CALLABLE: verifyEmailOtp
+// -------------------------------------------------------------
 exports.verifyEmailOtp = onCall(async (request) => {
-  if (!request.auth) throw new HttpsError("unauthenticated", "Please sign in first.");
-  const user = await getAuth().getUser(request.auth.uid);
-  if (user.emailVerified) return { verified: true };
-
-  await consumeCode("verify", otp.normalizeEmail(user.email), request.data?.code);
-  await getAuth().updateUser(user.uid, { emailVerified: true });
+  if (!request.auth) {
+    throw new HttpsError('unauthenticated', 'Please sign in to verify your email.');
+  }
+  const email = normalizeEmail(request.auth.token.email);
+  const { uid } = await consumeOtp('verify_email', email, request.data?.otp);
+  if (uid !== request.auth.uid) {
+    throw new HttpsError('permission-denied', 'This code does not belong to your account.');
+  }
+  await getAuth().updateUser(uid, { emailVerified: true });
   return { verified: true };
 });
 
-// data: { email, code, newPassword }
+// -------------------------------------------------------------
+// CALLABLE: resetPasswordWithOtp
+// -------------------------------------------------------------
 exports.resetPasswordWithOtp = onCall(async (request) => {
-  const email = requireEmail(request.data?.email);
-  const newPassword = String(request.data?.newPassword || "");
+  const email = normalizeEmail(request.data?.email);
+  const newPassword = String(request.data?.newPassword || '');
   if (newPassword.length < 6) {
-    throw new HttpsError("invalid-argument", "New password must be at least 6 characters.");
+    throw new HttpsError('invalid-argument', 'New password must be at least 6 characters.');
   }
 
-  await consumeCode("reset", email, request.data?.code);
-  const user = await findUserByEmail(email);
-  if (!user) throw new HttpsError("not-found", "No active code for this email. Please request a new one.");
-
+  const { uid } = await consumeOtp('reset_password', email, request.data?.otp);
   // Receiving the code proves ownership of the inbox, so the email is verified too.
-  await getAuth().updateUser(user.uid, { password: newPassword, emailVerified: true });
-  await getAuth().revokeRefreshTokens(user.uid);
+  await getAuth().updateUser(uid, { password: newPassword, emailVerified: true });
+  await getAuth().revokeRefreshTokens(uid);
   return { reset: true };
 });

@@ -8,7 +8,15 @@ class EmailVerificationScreen extends StatefulWidget {
   // Sign-up already emails a code; otherwise the screen requests one when it opens.
   final bool codeAlreadySent;
 
-  const EmailVerificationScreen({super.key, required this.onVerified, this.codeAlreadySent = false});
+  /// Send a fresh code when the screen opens (e.g. an unverified user signing in).
+  /// Sign-up already sends one, so it leaves this off.
+  final bool sendOtpOnOpen;
+
+  const EmailVerificationScreen({
+    super.key,
+    required this.onVerified,
+    this.sendOtpOnOpen = false,
+  });
 
   @override
   State<EmailVerificationScreen> createState() => _EmailVerificationScreenState();
@@ -18,17 +26,16 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
   final AuthService _auth = AuthService();
   final TextEditingController _otpController = TextEditingController();
   bool _isVerifying = false;
-  bool _isSending = false;
-  int _resendCooldown = 0;
+  int _resendCooldown = 60;
   Timer? _timer;
 
   @override
   void initState() {
     super.initState();
-    if (widget.codeAlreadySent) {
-      _startCooldown();
+    if (widget.sendOtpOnOpen) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _sendOtp(showSuccess: false));
     } else {
-      WidgetsBinding.instance.addPostFrameCallback((_) => _sendCode());
+      _startCooldown();
     }
   }
 
@@ -40,10 +47,12 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
   }
 
   void _startCooldown() {
-    setState(() => _resendCooldown = 30);
+    setState(() => _resendCooldown = 60);
     _timer?.cancel();
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (_resendCooldown > 0) {
+      if (!mounted) {
+        timer.cancel();
+      } else if (_resendCooldown > 0) {
         setState(() => _resendCooldown--);
       } else {
         timer.cancel();
@@ -51,20 +60,23 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
     });
   }
 
-  Future<void> _sendCode() async {
-    if (_resendCooldown > 0 || _isSending) return;
-    setState(() => _isSending = true);
-    final res = await _auth.sendEmailVerificationOtp();
+  Future<void> _handleResend() async {
+    if (_resendCooldown > 0) return;
+    await _sendOtp(showSuccess: true);
+  }
+
+  Future<void> _sendOtp({required bool showSuccess}) async {
+    final email = _auth.currentUser?.email ?? '';
+    final res = await _auth.sendEmailVerificationOtp(email);
     if (!mounted) return;
-    setState(() => _isSending = false);
-    if (res.success) _startCooldown();
+    _startCooldown();
 
     if (_auth.currentUser?.isEmailVerified == true) {
       widget.onVerified();
       return;
     }
 
-    if (mounted) {
+    if (showSuccess || !res.success) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(res.message),
@@ -177,7 +189,7 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
                 ),
                 const SizedBox(height: 24),
 
-                // Inbox hint
+                // OTP Delivery Notice
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
@@ -191,7 +203,7 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
                       const SizedBox(width: 10),
                       const Expanded(
                         child: Text(
-                          'Check your inbox (and spam folder). The code expires in 10 minutes.',
+                          'The code expires in 10 minutes. Check your spam folder if you don’t see it.',
                           style: TextStyle(fontSize: 12, color: AppColors.primary, fontWeight: FontWeight.w600),
                         ),
                       ),

@@ -32,8 +32,8 @@ service cloud.firestore {
       allow read, write: if true;
     }
 
-    // 6. Email OTP codes: only Cloud Functions (Admin SDK) may touch these
-    match /email_otps/{otpId} {
+    // 6. OTP codes: hashed codes managed only by Cloud Functions (Admin SDK)
+    match /otp_codes/{otpId} {
       allow read, write: if false;
     }
   }

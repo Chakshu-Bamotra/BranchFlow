@@ -43,12 +43,12 @@ class _AuthScreenState extends State<AuthScreen> {
     );
   }
 
-  void _navigateToVerification({bool codeAlreadySent = false}) {
+  void _navigateToVerification({bool sendOtpOnOpen = false}) {
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => EmailVerificationScreen(
           onVerified: _navigateToHome,
-          codeAlreadySent: codeAlreadySent,
+          sendOtpOnOpen: sendOtpOnOpen,
         ),
       ),
     );
@@ -67,10 +67,10 @@ class _AuthScreenState extends State<AuthScreen> {
     setState(() => _isLoading = false);
 
     if (res.success) {
+      _syncUserRole();
       if (_auth.currentUser?.isEmailVerified == false) {
-        _navigateToVerification();
+        _navigateToVerification(sendOtpOnOpen: true);
       } else {
-        _syncUserRole();
         _navigateToHome();
       }
     } else {
@@ -150,8 +150,7 @@ class _AuthScreenState extends State<AuthScreen> {
 
     bool isSubmitting = false;
     bool otpSent = false;
-    String? sentMessage;
-    String? errorText;
+    String sentMessage = '';
 
     showDialog(
       context: context,
@@ -199,8 +198,30 @@ class _AuthScreenState extends State<AuthScreen> {
                           border: Border.all(color: const Color(0xFFD4E8DA)),
                         ),
                         child: Text(
-                          sentMessage ?? 'Check your email for the 6-digit code.',
+                          sentMessage,
                           style: const TextStyle(fontSize: 12, color: AppColors.primary, fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: TextButton(
+                          onPressed: isSubmitting
+                              ? null
+                              : () async {
+                                  final messenger = ScaffoldMessenger.of(context);
+                                  setDialogState(() => isSubmitting = true);
+                                  final res = await _auth.sendPasswordResetOtp(resetEmailController.text);
+                                  setDialogState(() {
+                                    isSubmitting = false;
+                                    if (res.success) sentMessage = res.message;
+                                  });
+                                  if (!res.success) {
+                                    messenger.showSnackBar(
+                                      SnackBar(content: Text(res.message), backgroundColor: AppColors.danger),
+                                    );
+                                  }
+                                },
+                          child: const Text('Resend code', style: TextStyle(fontSize: 12)),
                         ),
                       ),
                       const SizedBox(height: 16),
@@ -257,8 +278,6 @@ class _AuthScreenState extends State<AuthScreen> {
                               if (res.success) {
                                 otpSent = true;
                                 sentMessage = res.message;
-                              } else {
-                                errorText = res.message;
                               }
                             });
                           },
@@ -290,7 +309,8 @@ class _AuthScreenState extends State<AuthScreen> {
                             });
                             if (!res.success) return;
 
-                            if (ctx.mounted) {
+                            // Keep the dialog open on failure so the user can retry the code.
+                            if (res.success && ctx.mounted) {
                               Navigator.of(ctx).pop();
                             }
                             if (mounted) {
@@ -320,20 +340,35 @@ class _AuthScreenState extends State<AuthScreen> {
   }
 
   // -------------------------------------------------------------
-  // FILL CREDENTIALS HINT (DOES NOT LOGIN AUTOMATICALLY!)
+  // FILL CREDENTIALS HINT (MEMBER DEMO AUTO-FILL)
   // -------------------------------------------------------------
-  void _quickFillDemo(String email, String role) {
+  void _quickFillMemberDemo() {
     setState(() {
-      _emailController.text = email;
+      _emailController.text = 'member@branchflow.lib';
       _passwordController.text = 'password123';
       _isSignUp = false;
-      _selectedRole = role;
+      _selectedRole = 'member';
     });
-    // Deliberately NOT calling _handleSignIn() so staff/member can review/enter credentials manually!
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('$role credentials filled. Review and tap "Sign In" to authenticate.'),
-        duration: const Duration(seconds: 2),
+      const SnackBar(
+        content: Text('Member demo credentials filled. Tap "Sign In" to authenticate.'),
+        duration: Duration(seconds: 2),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  void _selectStaffManualMode() {
+    setState(() {
+      _emailController.clear();
+      _passwordController.clear();
+      _isSignUp = false;
+      _selectedRole = 'librarian';
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Staff portal: Please manually enter your authorized staff credentials.'),
+        duration: Duration(seconds: 3),
         behavior: SnackBarBehavior.floating,
       ),
     );
@@ -567,33 +602,26 @@ class _AuthScreenState extends State<AuthScreen> {
                           ),
                         ),
                       ] else ...[
-                        const SizedBox(height: 14),
-                        // Sign Up: Role Selection
-                        const Text(
-                          'I am joining as:',
-                          style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textSecondary),
-                        ),
-                        const SizedBox(height: 6),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: ChoiceChip(
-                                label: const Text('Member'),
-                                selected: _selectedRole == 'member',
-                                avatar: const Icon(Icons.person_outline, size: 16),
-                                onSelected: (_) => setState(() => _selectedRole = 'member'),
+                        const SizedBox(height: 12),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: AppColors.accentSoft,
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: const Color(0xFFD4E8DA)),
+                          ),
+                          child: const Row(
+                            children: [
+                              Icon(Icons.badge_outlined, size: 16, color: AppColors.primary),
+                              SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  'Registering as a Community Library Member.',
+                                  style: TextStyle(fontSize: 11, color: AppColors.primary, fontWeight: FontWeight.w600),
+                                ),
                               ),
-                            ),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: ChoiceChip(
-                                label: const Text('Librarian Staff'),
-                                selected: _selectedRole == 'librarian',
-                                avatar: const Icon(Icons.admin_panel_settings_outlined, size: 16),
-                                onSelected: (_) => setState(() => _selectedRole = 'librarian'),
-                              ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
                         const SizedBox(height: 14),
                       ],
@@ -617,7 +645,7 @@ class _AuthScreenState extends State<AuthScreen> {
                 // Quick Demo Accounts for Evaluation
                 const Center(
                   child: Text(
-                    'Quick Test Accounts:',
+                    'Quick Test & Login Mode:',
                     style: TextStyle(fontSize: 11, color: AppColors.textMuted, fontWeight: FontWeight.bold),
                   ),
                 ),
@@ -630,8 +658,8 @@ class _AuthScreenState extends State<AuthScreen> {
                           padding: const EdgeInsets.symmetric(vertical: 8),
                           textStyle: const TextStyle(fontSize: 11),
                         ),
-                        onPressed: () => _quickFillDemo('member@branchflow.lib', 'member'),
-                        child: const Text('👤 Member'),
+                        onPressed: _quickFillMemberDemo,
+                        child: const Text('👤 Member (Demo Auto-Fill)'),
                       ),
                     ),
                     const SizedBox(width: 8),
@@ -641,8 +669,8 @@ class _AuthScreenState extends State<AuthScreen> {
                           padding: const EdgeInsets.symmetric(vertical: 8),
                           textStyle: const TextStyle(fontSize: 11),
                         ),
-                        onPressed: () => _quickFillDemo('staff@branchflow.lib', 'librarian'),
-                        child: const Text('🏢 Staff'),
+                        onPressed: _selectStaffManualMode,
+                        child: const Text('🏢 Staff (Manual Login)'),
                       ),
                     ),
                   ],

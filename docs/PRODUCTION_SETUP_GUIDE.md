@@ -87,6 +87,33 @@ Verify in the Firebase Console:
 - *Firestore ➔ Rules*: You will see the deployed rules active.
 - *Firestore ➔ Indexes*: The composite indexes will be created automatically.
 
+### Email OTP (Sign-Up Verification & Forgot Password)
+
+Sign-up verification codes and password-reset codes are generated, emailed and checked by Cloud Functions in [`functions/index.js`](../functions/index.js). The codes never reach the client: Firestore stores only a hash in `otp_codes`, which clients can't read. Each code expires after 10 minutes, a new code can be requested once every 60 seconds, and a code is locked after 5 wrong attempts.
+
+> Cloud Functions requires the Firebase **Blaze** (pay-as-you-go) plan.
+
+1. Create SMTP credentials. For Gmail, enable 2-Step Verification and create an [App Password](https://myaccount.google.com/apppasswords). Any SMTP provider works, including SendGrid, Brevo, Resend and Mailgun.
+2. Store the credentials as secrets:
+   ```bash
+   firebase functions:secrets:set SMTP_USER   # e.g. yourapp@gmail.com
+   firebase functions:secrets:set SMTP_PASS   # the app password / SMTP key
+   ```
+3. Optional: if you aren't using Gmail, create `functions/.env` to set the host and sender:
+   ```
+   SMTP_HOST=smtp.sendgrid.net
+   SMTP_PORT=465
+   MAIL_FROM=BranchFlow <no-reply@yourdomain.com>
+   ```
+4. Deploy:
+   ```bash
+   cd functions && npm install && cd ..
+   firebase deploy --only functions,firestore:rules
+   ```
+5. Optional: in the Google Cloud console, add a Firestore TTL policy on `otp_codes.expiresAt` so expired codes are cleaned up automatically.
+
+When Firebase isn't initialized (offline mode or unit tests), the app falls back to local codes that are printed only to the debug console.
+
 ---
 
 ## Step 4: Seeding Live Initial Data
